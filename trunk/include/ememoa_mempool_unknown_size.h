@@ -41,6 +41,10 @@ int	ememoa_mempool_unknown_size_push_object (unsigned int				mempool,
 void*	ememoa_mempool_unknown_size_pop_object (unsigned int				mempool,
 						unsigned int				size);
 
+void*   ememoa_mempool_unknown_size_resize_object (unsigned int                         mempool,
+                                                   void                                 *ptr,
+                                                   unsigned int                         size);
+
 #ifdef DEBUG
 void	ememoa_mempool_unknown_size_display_statistic (unsigned int			mempool);
 #else
