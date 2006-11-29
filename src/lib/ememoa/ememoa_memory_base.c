@@ -45,7 +45,7 @@ ememoa_memory_base_resize_list_new (unsigned int size)
    if (size == 0)
      return NULL;
 
-   tmp = ememoa_memory_base_alloc(sizeof (struct ememoa_memory_base_resize_list_s));
+   tmp = ememoa_memory_base_alloc (sizeof (struct ememoa_memory_base_resize_list_s));
 
    assert(tmp != NULL);
 

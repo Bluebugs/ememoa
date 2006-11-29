@@ -50,6 +50,8 @@ struct ememoa_mempool_alloc_item_s
    struct ememoa_mempool_alloc_item_s		*next;
    struct ememoa_mempool_alloc_item_s		*prev;
    struct ememoa_mempool_unknown_size_item_s	*data;
+
+   unsigned int                                 size;
 };
 
 struct ememoa_mempool_unknown_size_item_s
@@ -290,7 +292,7 @@ ememoa_mempool_unknown_size_push_object (unsigned int	mempool,
 					 void		*ptr)
 {
    struct ememoa_mempool_unknown_size_item_s	*old = (struct ememoa_mempool_unknown_size_item_s*)ptr - 1;
-   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(mempool);
+   struct ememoa_mempool_unknown_size_s         *memory = ememoa_mempool_unknown_size_get_index (mempool);
 
    assert (ptr != NULL);
 
@@ -325,6 +327,49 @@ ememoa_mempool_unknown_size_push_object (unsigned int	mempool,
      return ememoa_mempool_fixed_push_object(memory->pools[old->index], old);
 }
 
+void*
+ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
+                                           void         *ptr,
+                                           unsigned int size)
+{
+   struct ememoa_mempool_unknown_size_item_s    *old = (struct ememoa_mempool_unknown_size_item_s*)ptr - 1;
+   struct ememoa_mempool_unknown_size_s         *memory = ememoa_mempool_unknown_size_get_index (mempool);
+   void*                                        new;
+   unsigned int                                 copy;
+
+   EMEMOA_CHECK_MAGIC(memory);
+
+   if (!ptr)
+     return ememoa_mempool_unknown_size_pop_object (mempool, size);
+
+   EMEMOA_CHECK_MAGIC(old);
+
+   if (old->index == -1)
+     {
+        struct ememoa_mempool_alloc_item_s      *item;
+
+        item = old->item;
+
+        if (item->size >= size)
+          return ptr;
+
+        copy = item->size;
+     }
+   else
+     {
+        if (memory->pools_match[old->index] >= size)
+          return ptr;
+
+        copy = memory->pools_match[old->index] - sizeof (struct ememoa_mempool_unknown_size_item_s);
+     }
+
+   new = ememoa_mempool_unknown_size_pop_object (mempool, size);
+   memcpy (new, ptr, copy);
+   ememoa_mempool_unknown_size_push_object (mempool, ptr);
+
+   return new;
+}
+
 /**
  * Pops a new object out of the memory pool
  *
@@ -352,11 +397,14 @@ void*
 ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 					unsigned int	size)
 {
-   struct ememoa_mempool_unknown_size_s		*memory = ememoa_mempool_unknown_size_get_index(mempool);
+   struct ememoa_mempool_unknown_size_s		*memory = ememoa_mempool_unknown_size_get_index (mempool);
    struct ememoa_mempool_unknown_size_item_s	*new = NULL;
    unsigned int					i;
 
    EMEMOA_CHECK_MAGIC(memory);
+
+   /* Don't forget to count ememoa_mempool_unknown_size_item_s size in size. */
+   size += sizeof (struct ememoa_mempool_unknown_size_item_s);
 
    for (i = 0; i < memory->pools_count; ++i)
      if (memory->pools_match[i] > size)
@@ -379,7 +427,7 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 
 	if ((item = ememoa_mempool_fixed_pop_object (memory->allocated_list)) == NULL)
 	  {
-	     memory->last_error_code = ememoa_mempool_fixed_get_last_error (memory->pools[i]);
+	     memory->last_error_code = ememoa_mempool_fixed_get_last_error (memory->allocated_list);
 	     return NULL;
 	  }
 
@@ -388,7 +436,12 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 	item->prev = NULL;
 	item->next = memory->start;
 
-        /* FIXME: big allocation case */
+        /* size need to be a multiple of 4K for the allocator. */
+        size--;
+        size |= 4096;
+        size++;
+        item->size = size - sizeof (struct ememoa_mempool_unknown_size_item_s);
+
 	new = ememoa_memory_base_alloc (size);
 	new->index = -1;
 
