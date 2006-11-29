@@ -62,7 +62,7 @@ int test2_run (unsigned int limit)
 int main (void)
 {
    test_zone = ememoa_mempool_fixed_init (sizeof (int), MAX_POOL, 0, NULL);
-   
+
    if (test2_run (100))
      return 1;
    if (test2_run (2000))
@@ -71,9 +71,9 @@ int main (void)
      return 1;
    if (test2_run (4096))
      return 1;
-   
+
    if (ememoa_mempool_fixed_clean (test_zone))
      return 1;
-   
+
    return 0;
 }

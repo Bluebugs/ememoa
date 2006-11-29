@@ -30,6 +30,7 @@
 #include "ememoa_mempool_fixed.h"
 #include "ememoa_mempool_unknown_size.h"
 #include "ememoa_mempool_struct.h"
+#include "ememoa_memory_base.h"
 #include "mempool_struct.h"
 
 #define	EMEMOA_MAGIC	0x4224008
@@ -58,58 +59,41 @@ struct ememoa_mempool_unknown_size_item_s
    unsigned int				magic;
 #endif
    struct ememoa_mempool_alloc_item_s	*item;
-   void*					data;
+   void*				data;
 };
 
-struct ememoa_mempool_unknown_size_s	*all_unknown_size_pool = NULL;
-static unsigned int			all_unknown_size_pool_count = 0;
+struct ememoa_memory_base_resize_list_s         *unknown_size_pool_list = NULL;
 
-static unsigned int				new_ememoa_unknown_pool ()
+static unsigned int
+new_ememoa_unknown_pool ()
 {
-   struct ememoa_mempool_unknown_size_s		*temp;
-   unsigned int					i;
+   if (!unknown_size_pool_list)
+     unknown_size_pool_list = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_unknown_size_s));
 
-   for (i = 0; i < all_unknown_size_pool_count; ++i)
-     if (all_unknown_size_pool[i].in_use == 0)
-       return i;
+   assert (unknown_size_pool_list != NULL);
 
-   ++all_unknown_size_pool_count;
-   temp = realloc (all_unknown_size_pool, sizeof (struct ememoa_mempool_unknown_size_s) * all_unknown_size_pool_count);
-
-   assert (temp != NULL);
-
-   all_unknown_size_pool = temp;
-
-   return all_unknown_size_pool_count - 1;
+   return ememoa_memory_base_resize_list_new_item (unknown_size_pool_list);
 }
 
-/**
- * @defgroup Ememoa_Mempool_Unknown_Size Memory pool manipulation functions for variable size objects
- *
- */
-
-static int
-ememoa_mempool_unknown_size_partial_clean (struct ememoa_mempool_unknown_size_s	*memory,
-					   unsigned int				position,
-					   ememoa_mempool_error_t		error_code)
+struct ememoa_mempool_unknown_size_s*
+ememoa_mempool_unknown_size_get_index (unsigned int index)
 {
-   unsigned int	i = position;
+   assert (unknown_size_pool_list != NULL);
 
-   for (--i; i > 0; --i)
-     ememoa_mempool_fixed_clean (memory->pools[i]);
+   return ememoa_memory_base_resize_list_get_item (unknown_size_pool_list, index);
+}
 
-   free (memory->pools_match);
-   free (memory->pools);
+static void
+ememoa_mempool_unknown_size_back (unsigned int index)
+{
+   assert (unknown_size_pool_list != NULL);
 
-   bzero (memory, sizeof (struct ememoa_mempool_unknown_size_s));
-   memory->last_error_code = error_code;
-
-   return -1;
+   ememoa_memory_base_resize_list_back (unknown_size_pool_list, index);
 }
 
 /**
  * Initializes a memory pool structure for later use
- * 
+ *
  * The following example code demonstrates how to ensure that the
  * given memory pool has been successfully initialized.
  *
@@ -149,7 +133,7 @@ ememoa_mempool_unknown_size_init (unsigned int				map_items_count,
 				  const struct ememoa_mempool_desc_s	*desc)
 {
    unsigned int				index = new_ememoa_unknown_pool ();
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + index;
+   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(index);
 
    unsigned int	i;
 
@@ -164,8 +148,8 @@ ememoa_mempool_unknown_size_init (unsigned int				map_items_count,
 #endif
 
    memory->pools_count = map_items_count;
-   memory->pools_match = malloc (sizeof (unsigned int) * map_items_count);
-   memory->pools = malloc (sizeof (unsigned int) * map_items_count);
+   memory->pools_match = ememoa_memory_base_alloc (sizeof (unsigned int) * map_items_count);
+   memory->pools = ememoa_memory_base_alloc (sizeof (unsigned int) * map_items_count);
 
    for (i = 0; i < map_items_count; ++i)
      {
@@ -220,7 +204,7 @@ ememoa_mempool_unknown_size_init (unsigned int				map_items_count,
 int
 ememoa_mempool_unknown_size_clean (unsigned int		mempool)
 {
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + mempool;
+   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index (mempool);
 
    EMEMOA_CHECK_MAGIC(memory);
 
@@ -230,11 +214,12 @@ ememoa_mempool_unknown_size_clean (unsigned int		mempool)
    pthread_mutex_destroy (&(memory->lock));
 #endif
 
-   free (memory->pools_match);
-   free (memory->pools);
+   ememoa_memory_base_free (memory->pools_match);
+   ememoa_memory_base_free (memory->pools);
 
    bzero (memory, sizeof (struct ememoa_mempool_unknown_size_s));
-  
+   ememoa_mempool_unknown_size_back(mempool);
+
    return 0;
 }
 
@@ -252,7 +237,7 @@ ememoa_mempool_unknown_size_clean (unsigned int		mempool)
 int
 ememoa_mempool_unknown_size_free_all_objects (unsigned int	mempool)
 {
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + mempool;
+   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(mempool);
    unsigned int				i;
 
    EMEMOA_CHECK_MAGIC(memory);
@@ -276,11 +261,10 @@ ememoa_mempool_unknown_size_free_all_objects (unsigned int	mempool)
    memory->start = NULL;
 
    EMEMOA_UNLOCK(memory);
-   return 0;  
+   return 0;
 }
 
-/**
- * Push back an object in the memory pool
+/** * Push back an object in the memory pool
  *
  * The following example code demonstrate how to ensure that a
  * given pointer has been successfully given back to his memory pool.
@@ -306,9 +290,10 @@ ememoa_mempool_unknown_size_push_object (unsigned int	mempool,
 					 void		*ptr)
 {
    struct ememoa_mempool_unknown_size_item_s	*old = (struct ememoa_mempool_unknown_size_item_s*)ptr - 1;
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + mempool;
+   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(mempool);
 
    assert (ptr != NULL);
+
    EMEMOA_CHECK_MAGIC(memory);
    EMEMOA_CHECK_MAGIC(old);
 
@@ -319,7 +304,7 @@ ememoa_mempool_unknown_size_push_object (unsigned int	mempool,
 	EMEMOA_LOCK(memory);
 
 	item = old->item;
-      
+
 	if (item->prev != NULL)
 	  item->prev->next = item->next;
 
@@ -331,7 +316,7 @@ ememoa_mempool_unknown_size_push_object (unsigned int	mempool,
 
 	EMEMOA_UNLOCK(memory);
 
-	free (old);
+	ememoa_memory_base_free (old);
 
 	return ememoa_mempool_fixed_push_object (memory->allocated_list, item);
 	return -1;
@@ -367,9 +352,9 @@ void*
 ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 					unsigned int	size)
 {
+   struct ememoa_mempool_unknown_size_s		*memory = ememoa_mempool_unknown_size_get_index(mempool);
    struct ememoa_mempool_unknown_size_item_s	*new = NULL;
    unsigned int					i;
-   struct ememoa_mempool_unknown_size_s		*memory = all_unknown_size_pool + mempool;
 
    EMEMOA_CHECK_MAGIC(memory);
 
@@ -403,9 +388,10 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 	item->prev = NULL;
 	item->next = memory->start;
 
-	new = malloc (size);
+        /* FIXME: big allocation case */
+	new = ememoa_memory_base_alloc (size);
 	new->index = -1;
-      
+
 	item->data = new;
 	new->item = item;
 
@@ -440,7 +426,7 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 int
 ememoa_mempool_unknown_size_garbage_collect (unsigned int mempool)
 {
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + mempool;
+   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(mempool);
    unsigned int				i;
    int					count = 0;
 
@@ -448,33 +434,31 @@ ememoa_mempool_unknown_size_garbage_collect (unsigned int mempool)
 
    for (i = 0; i < memory->pools_count; ++i)
      count += ememoa_mempool_fixed_garbage_collect (memory->pools[i]);
- 
+
    count += ememoa_mempool_fixed_garbage_collect (memory->allocated_list);
 
-   return count;  
+   return count;
 }
 
 /**
  * Execute fctl on all allocated data in the pool. If the execution of fctl something else
- * than 0, then the walk ends and returns the error code provided by fctl. 
+ * than 0, then the walk ends and returns the error code provided by fctl.
  *
- * @param	memory		Pointer to a valid address of a memory pool. If
- *				@c memory is not a valid memory pool, bad things
- *				will happen.
- * @param	fctl		Function pointer that must be run on all allocated
- *				objects.
- * @param	data		Pointer that will be passed as is to each call to fctl.	
- * @return	Will return @c 0 if the run walked over all allocated objects.
- * @ingroup	Ememoa_Mempool_Unknown_Size
+ * @param       memory                  Pointer to a valid  address of a memory  pool. If @c
+ *                                      memory is not  a valid memory pool, bad
+ *                                      things will happen.
+ * @param       fctl                    Function  pointer that  must be run  on all  allocated objects.
+ * @param       data                    Pointer that will be  passed as is to each call to fctl.
+ * @return      Will return @c 0 if the run walked  over all  allocated objects.
+ * @ingroup     Ememoa_Mempool_Unknown_Size
  */
 int
-ememoa_mempool_unknown_size_walk_over (unsigned int	mempool,
-				       ememoa_fctl	fctl,
-				       void		*data)
+ememoa_mempool_unknown_size_walk_over    (unsigned    int   mempool,
+                                          ememoa_fctl fctl, void *data)
 {
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + mempool;
-   unsigned int				i;
-   int					error = 0;
+   struct ememoa_mempool_unknown_size_s *memory =  ememoa_mempool_unknown_size_get_index(mempool);
+   unsigned int i;
+   int error = 0;
 
    EMEMOA_CHECK_MAGIC(memory);
 
@@ -484,10 +468,9 @@ ememoa_mempool_unknown_size_walk_over (unsigned int	mempool,
 
    if ((error = ememoa_mempool_fixed_walk_over (memory->allocated_list, fctl, data)) != 0)
      return error;
-  
+
    return 0;
 }
-
 
 /**
  * Displays all the statistics currently known about a Mempool, useful to dimension it.
@@ -501,7 +484,7 @@ ememoa_mempool_unknown_size_walk_over (unsigned int	mempool,
 void
 ememoa_mempool_unknown_size_display_statistic (unsigned int mempool)
 {
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + mempool;
+   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(mempool);
    unsigned int				i;
 
    EMEMOA_CHECK_MAGIC(memory);
