@@ -18,7 +18,7 @@ int main(void)
 						default_map_size_count,
 						0,
 						NULL);
-  
+
   for (i = 0; i < 10; ++i)
     {
       size = strlen (test_str) + strlen (print_str) + 3;

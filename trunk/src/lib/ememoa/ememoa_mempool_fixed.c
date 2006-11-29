@@ -18,12 +18,12 @@
 #include <pthread.h>
 
 #define	EMEMOA_LOCK(Memory) \
-	if ((Memory.options & EMEMOA_THREAD_PROTECTION) == EMEMOA_THREAD_PROTECTION) \
-		pthread_mutex_lock(&(Memory.lock));
+	if ((Memory->options & EMEMOA_THREAD_PROTECTION) == EMEMOA_THREAD_PROTECTION) \
+		pthread_mutex_lock(&(Memory->lock));
 
 #define	EMEMOA_UNLOCK(Memory) \
-	if ((Memory.options & EMEMOA_THREAD_PROTECTION) == EMEMOA_THREAD_PROTECTION) \
-		pthread_mutex_unlock(&(Memory.lock));
+	if ((Memory->options & EMEMOA_THREAD_PROTECTION) == EMEMOA_THREAD_PROTECTION) \
+		pthread_mutex_unlock(&(Memory->lock));
 
 #else
 
@@ -33,15 +33,15 @@
 #endif
 
 #include "ememoa_mempool_fixed.h"
+#include "ememoa_memory_base.h"
 #include "mempool_struct.h"
 
 #define	EMEMOA_MAGIC	0x4224007
 
 #ifdef DEBUG
 #define	EMEMOA_CHECK_MAGIC(Memory) \
-	assert(Memory.magic == EMEMOA_MAGIC); \
-	assert(Memory.in_use == 1); \
-	assert(Memory.max_objects_pot >= BITMASK_POWER);
+	assert(Memory->magic == EMEMOA_MAGIC); \
+	assert(Memory->max_objects_pot >= BITMASK_POWER);
 #else
 #define	EMEMOA_CHECK_MAGIC(Memory) ;
 #endif
@@ -81,9 +81,15 @@ typedef uint32_t	bitmask_t;
 #undef	ememoa_mempool_fixed_display_statistic_all
 #endif
 
-struct ememoa_mempool_fixed_s	*all_fixed_pool = NULL;
-static int			all_fixed_pool_count = 0;
-static int			all_fixed_pool_jump = 0;
+struct ememoa_mempool_fixed_pool_s
+{
+   unsigned int         jump_object;
+   unsigned int         available_objects;
+   bitmask_t            *objects_use;
+   void                 *objects_pool;
+};
+
+struct ememoa_memory_base_resize_list_s *fixed_pool_list = NULL;
 
 /**
  * @defgroup Ememoa_Mempool_Fixed Memory pool manipulation functions for fixed size object
@@ -93,32 +99,39 @@ static int			all_fixed_pool_jump = 0;
 /**
  * Search or allocate a new mempool structur.
  *
- * @return	Will return the index of the mempool in all_fixed_pool or -1 if it failed.
+ * @return	Will return the index of the mempool or -1 if it failed.
  * @ingroup	Ememoa_Search_Mempool
  */
-static int			new_ememoa_fixed_pool ()
+static int
+new_ememoa_fixed_pool ()
 {
-   struct ememoa_mempool_fixed_s	*temp;
-   int					i;
+   if (!fixed_pool_list)
+     fixed_pool_list = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_fixed_s));
 
-   for (i = all_fixed_pool_jump; i < all_fixed_pool_count; ++i)
-     if (all_fixed_pool[i].in_use == 0)
-       return i;
+   assert (fixed_pool_list != NULL);
 
-   ++all_fixed_pool_count;
-   temp = realloc (all_fixed_pool, sizeof (struct ememoa_mempool_fixed_s) * all_fixed_pool_count);
+   return ememoa_memory_base_resize_list_new_item (fixed_pool_list);
+}
 
-   if (temp == NULL)
-     return -1;
+struct ememoa_mempool_fixed_s*
+ememoa_mempool_fixed_get_index (unsigned int index)
+{
+   assert (fixed_pool_list != NULL);
 
-   all_fixed_pool = temp;
+   return ememoa_memory_base_resize_list_get_item (fixed_pool_list, index);
+}
 
-   return all_fixed_pool_count - 1;
+static void
+ememoa_mempool_fixed_back (unsigned int index)
+{
+   assert (fixed_pool_list != NULL);
+
+   ememoa_memory_base_resize_list_back (fixed_pool_list, index);
 }
 
 /**
  * Initializes a memory pool structure for later use
- * 
+ *
  * The following example code demonstrates how to ensure that the
  * given memory pool has been successfully initialized.
  *
@@ -150,13 +163,14 @@ static int			new_ememoa_fixed_pool ()
  *		of the memory pool if it succeed.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-int	ememoa_mempool_fixed_init (unsigned int				object_size,
-				   unsigned int				preallocated_item_pot,
-				   unsigned int				options,
-				   const struct ememoa_mempool_desc_s	*desc)
+int
+ememoa_mempool_fixed_init (unsigned int				object_size,
+                           unsigned int				preallocated_item_pot,
+                           unsigned int				options,
+                           const struct ememoa_mempool_desc_s	*desc)
 {
    int					index = new_ememoa_fixed_pool ();
-   struct ememoa_mempool_fixed_s	*memory = all_fixed_pool + index;
+   struct ememoa_mempool_fixed_s	*memory = ememoa_mempool_fixed_get_index(index);
 
    if (index == -1)
      return index;
@@ -178,28 +192,26 @@ int	ememoa_mempool_fixed_init (unsigned int				object_size,
 #ifdef DEBUG
    memory->max_out_objects = 0;
    memory->out_objects = 0;
-   memory->total_objects = 0;
    memory->magic = EMEMOA_MAGIC;
 #endif
 
    memory->desc = desc;
    memory->last_error_code = EMEMOA_NO_ERROR;
 
-   memory->allocated_pool = 0;
+   memory->base = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_fixed_pool_s));
    memory->jump_pool = 0;
+   /*
+   memory->allocated_pool = 0;
    memory->jump_object = NULL;
    memory->objects_pool = NULL;
    memory->available_objects = NULL;
    memory->objects_use = NULL;
-
+   */
    memory->options = options;
-   memory->in_use = 1;
 
 #ifdef HAVE_PTHREAD
    pthread_mutex_init (&(memory->lock), NULL);
 #endif
-
-   all_fixed_pool_jump = index + 1;
 
    return index;
 }
@@ -224,22 +236,23 @@ int	ememoa_mempool_fixed_init (unsigned int				object_size,
  * @return	Will return @c 0 if successfully cleaned.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-int	ememoa_mempool_fixed_clean (int	mempool)
+int
+ememoa_mempool_fixed_clean (int	mempool)
 {
-   int	error_code = 0;
+   struct ememoa_mempool_fixed_s        *memory = ememoa_mempool_fixed_get_index (mempool);
+   int                                  error_code = 0;
 
    error_code = ememoa_mempool_fixed_free_all_objects (mempool);
    if (error_code)
      return error_code;
 
 #ifdef HAVE_PTHREAD
-   pthread_mutex_destroy (&(all_fixed_pool[mempool].lock));
+   pthread_mutex_destroy (&(memory->lock));
 #endif
 
-   bzero (all_fixed_pool + mempool, sizeof (struct ememoa_mempool_fixed_s));
-
-   if (all_fixed_pool_jump > mempool)
-     all_fixed_pool_jump = mempool;
+   ememoa_memory_base_resize_list_clean (memory->base);
+   ememoa_mempool_fixed_back (mempool);
+   bzero (memory, sizeof (struct ememoa_mempool_fixed_s));
 
    return 0;
 }
@@ -267,7 +280,7 @@ set_adress (unsigned int	index_l,
    bitmask_t	mask = 1;
 
    assert(objects_use_slot != NULL);
-   
+
    mask <<= index_l;
 
    if ((objects_use_slot[index_h] &= ~mask) == 0)
@@ -288,61 +301,44 @@ set_adress (unsigned int	index_l,
  *
  * @param	memory		Pointer to a valid address of a memory pool. If
  *				an invalid pool is passed, bad things will happen.
- * @return	Will return @c 0 if successfully allocated.
+ * @return	Will return @c -1 if an error occurred or the index pool otherwise.
  * @ingroup	Ememoa_Alloc_Mempool
  */
-static int
+static struct ememoa_mempool_fixed_pool_s*
 add_pool (struct ememoa_mempool_fixed_s *memory)
 {
-   unsigned int	new_pool_index, allocated_pool;
-   unsigned int	*available_objects;
-   unsigned int	*jump_object;
-   void*	*objects_use;
-   void*	*objects_pool;
-   int		failed = 0;
+   struct ememoa_mempool_fixed_pool_s   *pool;
+   int                                  index;
 
-   allocated_pool = memory->allocated_pool;
-   new_pool_index = allocated_pool++;
+   index = ememoa_memory_base_resize_list_new_item (memory->base);
+   pool = ememoa_memory_base_resize_list_get_item (memory->base, index);
 
-   jump_object = realloc (memory->jump_object, allocated_pool * sizeof (unsigned int));
-   available_objects = realloc (memory->available_objects, allocated_pool * sizeof (unsigned int));
-   objects_use = realloc (memory->objects_use, allocated_pool * sizeof (bitmask_t*));
-   objects_pool = realloc (memory->objects_pool, allocated_pool * sizeof (void*));
+   assert(pool != NULL);
 
-   EMEMOA_CHECK_UPDATE_POINTER(jump_object, EMEMOA_ERROR_REALLOC_JUMP_OBJECT_FAILED);
-   EMEMOA_CHECK_UPDATE_POINTER(available_objects, EMEMOA_ERROR_REALLOC_AVAILABLE_OBJECTS_FAILED);
-   EMEMOA_CHECK_UPDATE_POINTER(objects_use, EMEMOA_ERROR_REALLOC_OBJECTS_USE_FAILED);
-   EMEMOA_CHECK_UPDATE_POINTER(objects_pool, EMEMOA_ERROR_REALLOC_OBJECTS_POOL_FAILED);
+   pool->objects_use = ememoa_memory_base_alloc (sizeof (bitmask_t) * memory->max_objects_poi);
+   pool->objects_pool = ememoa_memory_base_alloc (EMEMOA_SIZEOF_POOL(memory));
+   pool->available_objects = memory->max_objects - 1;
+   pool->jump_object = 0;
 
-   if (failed)
-     return -1;
-
-   objects_use[new_pool_index] = malloc (sizeof (bitmask_t) * memory->max_objects_poi);
-   objects_pool[new_pool_index] = malloc (EMEMOA_SIZEOF_POOL(memory));
-
-   if (objects_use[new_pool_index] == NULL 
-       || objects_pool[new_pool_index] == NULL)
+   if (pool->objects_use == NULL
+       || pool->objects_pool == NULL)
      {
-	free (objects_use[new_pool_index]);
-	free (objects_pool[new_pool_index]);
+	ememoa_memory_base_free (pool->objects_use);
+	ememoa_memory_base_free (pool->objects_pool);
+        ememoa_memory_base_resize_list_back (memory->base, index);
 	memory->last_error_code = EMEMOA_ERROR_MALLOC_NEW_POOL;
 
-	return -1;
+	return NULL;
      }
 
 #ifdef DEBUG
-   memset (objects_pool[new_pool_index], 42, EMEMOA_SIZEOF_POOL(memory));
-
-   memory->total_objects += memory->max_objects;
+   memset (pool->objects_pool, 42, EMEMOA_SIZEOF_POOL(memory));
 #endif
 
    /* Set all objects as available */
-   memset (objects_use[new_pool_index], 0xFF, sizeof (bitmask_t) * memory->max_objects_poi);
-   available_objects[new_pool_index] = memory->max_objects - 1;
-   memory->jump_object[new_pool_index] = 0;
-   memory->allocated_pool = allocated_pool;
+   memset (pool->objects_use, 0xFF, sizeof (bitmask_t) * memory->max_objects_poi);
 
-   return 0;  
+   return pool;
 }
 
 /**
@@ -367,82 +363,87 @@ add_pool (struct ememoa_mempool_fixed_s *memory)
  *		memory->last_error_code and ememoa_mempool_error2string to know why.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-void*	ememoa_mempool_fixed_pop_object (int	mempool)
+static int
+ememoa_mempool_fixed_lookup_empty_pool_cb (void *ctx, int index, void *data)
 {
+   struct ememoa_mempool_fixed_pool_s   *pool = data;
+
+   (void) index; (void) ctx;
+
+   return pool->available_objects > 0;
+}
+
+void*
+ememoa_mempool_fixed_pop_object (int mempool)
+{
+   struct ememoa_mempool_fixed_s        *memory = ememoa_mempool_fixed_get_index (mempool);
+   struct ememoa_mempool_fixed_pool_s   *pool;
    uint8_t				*start_adress = NULL;
-   unsigned int				allocated_pool;
-   unsigned int				*available_objects;
-   
-   EMEMOA_CHECK_MAGIC(all_fixed_pool[mempool]);
-   
-   EMEMOA_LOCK(all_fixed_pool[mempool]);
-   
-   allocated_pool = all_fixed_pool[mempool].allocated_pool;
-   available_objects = all_fixed_pool[mempool].available_objects;
 
-   for (available_objects += all_fixed_pool[mempool].jump_pool;
-	all_fixed_pool[mempool].jump_pool < allocated_pool && *available_objects == 0;
-	++(all_fixed_pool[mempool].jump_pool), ++available_objects)
-     ;
+   EMEMOA_CHECK_MAGIC(memory);
+   EMEMOA_LOCK(memory);
 
-   if (all_fixed_pool[mempool].jump_pool < allocated_pool)
+   pool = ememoa_memory_base_resize_list_search_over (memory->base,
+                                                      memory->jump_pool,
+                                                      -1,
+                                                      ememoa_mempool_fixed_lookup_empty_pool_cb,
+                                                      NULL,
+                                                      &memory->jump_pool);
+
+   if (pool != NULL)
      {
-	unsigned int	slot = all_fixed_pool[mempool].jump_pool;
-	bitmask_t	*itr = all_fixed_pool[mempool].objects_use[slot];
+	bitmask_t	*itr = pool->objects_use;
 	bitmask_t	reg;
 	int		index = 0;
 
-	/*
+        /*
 	  If bit is set to 0, then the corresponding memory object is in use
 	  if bit is set to 1, then the corresponding memory object is available
 	*/
-	for (itr += all_fixed_pool[mempool].jump_object[slot];
+	for (itr += pool->jump_object;
 	     *itr == 0;
-	     ++(all_fixed_pool[mempool].jump_object[slot]), ++itr)
+	     ++pool->jump_object, ++itr)
 	  ;
-	
-	index = all_fixed_pool[mempool].jump_object[slot] << BITMASK_POWER;
+
+	index = pool->jump_object << BITMASK_POWER;
 	reg = *itr;
 
 #ifdef USE64
-	index += ffsll(reg) - 1;
+	index += ffsll (reg) - 1;
 #else
-	index += ffs(reg) - 1;
+	index += ffs (reg) - 1;
 #endif
 
 	/* Remove available objects from the slot and update jump_pool if necessary */
-	if (--(all_fixed_pool[mempool].available_objects[slot]) == 0 && all_fixed_pool[mempool].jump_pool == slot)
-	  ++(all_fixed_pool[mempool].jump_pool);
-	
-	start_adress = all_fixed_pool[mempool].objects_pool[slot] + index * all_fixed_pool[mempool].object_size;
+	if (--pool->available_objects == 0)
+	  memory->jump_pool++;
 
-	set_adress(EMEMOA_INDEX_LOW(index),
-		   EMEMOA_INDEX_HIGH(index),
-		   all_fixed_pool[mempool].objects_use[slot],
-		   all_fixed_pool[mempool].jump_object + slot);
+	start_adress = pool->objects_pool + index * memory->object_size;
+
+	set_adress (EMEMOA_INDEX_LOW(index),
+                    EMEMOA_INDEX_HIGH(index),
+                    pool->objects_use,
+                    &pool->jump_object);
      }
    else
      {
-	if (add_pool(all_fixed_pool + mempool) == 0)
+        pool = add_pool (memory);
+	if (pool != NULL)
 	  {
-	     /*
-	       memory->allocated_pool has been increased by one, but not allocated_pool, so
-	       we use the last one as the valid index.
-	      */
-	     start_adress = all_fixed_pool[mempool].objects_pool[allocated_pool];
-	     set_adress(0, 0,
-			all_fixed_pool[mempool].objects_use[allocated_pool],
-			all_fixed_pool[mempool].jump_object + allocated_pool);
+	     start_adress = pool->objects_pool;
+	     set_adress (0, 0,
+                         pool->objects_use,
+                         &pool->jump_object);
 	  }
 	else
-	  all_fixed_pool[mempool].last_error_code = EMEMOA_NO_MORE_MEMORY;
+	  memory->last_error_code = EMEMOA_NO_MORE_MEMORY;
      }
-   
+
 #ifdef DEBUG
-   all_fixed_pool[mempool].max_out_objects += (all_fixed_pool[mempool].max_out_objects < ++(all_fixed_pool[mempool].out_objects)) ? 1 : 0;
+   memory->max_out_objects += (memory->max_out_objects < ++memory->out_objects) ? 1 : 0;
 #endif
 
-   EMEMOA_UNLOCK(all_fixed_pool[mempool]);
+   EMEMOA_UNLOCK(memory);
    return start_adress;
 }
 
@@ -455,40 +456,37 @@ void*	ememoa_mempool_fixed_pop_object (int	mempool)
  * @return	Will return @c 0 if successfully cleaned.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-int	ememoa_mempool_fixed_free_all_objects (int mempool)
+static int
+ememoa_mempool_fixed_free_pool_cb (void *ctx, int index, void *data)
 {
-   unsigned int				i;
-   void*				*objects_use;
-   void*				*objects_pool;
+   struct ememoa_mempool_fixed_pool_s   *pool = data;
 
-   EMEMOA_CHECK_MAGIC(all_fixed_pool[mempool]);
+   (void) ctx; (void) index;
 
-   EMEMOA_LOCK(all_fixed_pool[mempool]);
-  
-   free (all_fixed_pool[mempool].available_objects);
-   all_fixed_pool[mempool].available_objects = NULL;
+   ememoa_memory_base_free (pool->objects_use);
+   ememoa_memory_base_free (pool->objects_pool);
 
-   objects_use = all_fixed_pool[mempool].objects_use;
-   objects_pool = all_fixed_pool[mempool].objects_pool;
-   for (i = 0; i < all_fixed_pool[mempool].allocated_pool && *objects_use && *objects_pool; ++i, ++objects_use, ++objects_pool)
-     {
-	free (*objects_use);
-	free (*objects_pool);
-     }
-   free (all_fixed_pool[mempool].objects_use);
-   free (all_fixed_pool[mempool].objects_pool);
+   return 1;
+}
 
-   all_fixed_pool[mempool].objects_use = NULL;
-   all_fixed_pool[mempool].objects_pool = NULL;
+int
+ememoa_mempool_fixed_free_all_objects (int mempool)
+{
+   struct ememoa_mempool_fixed_s        *memory = ememoa_mempool_fixed_get_index (mempool);
+
+   EMEMOA_CHECK_MAGIC(memory);
+   EMEMOA_LOCK(memory);
+
+   ememoa_memory_base_resize_list_walk_over (memory->base, 0, -1, ememoa_mempool_fixed_free_pool_cb, NULL);
+   ememoa_memory_base_resize_list_clean (memory->base);
 
 #ifdef DEBUG
-   all_fixed_pool[mempool].out_objects = 0;
-   all_fixed_pool[mempool].total_objects = 0;
+   memory->out_objects = 0;
 #endif
 
-   all_fixed_pool[mempool].allocated_pool = 0;
+   memory->base = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_fixed_pool_s));
 
-   EMEMOA_UNLOCK(all_fixed_pool[mempool]);
+   EMEMOA_UNLOCK(memory);
 
    return 0;
 }
@@ -514,65 +512,91 @@ int	ememoa_mempool_fixed_free_all_objects (int mempool)
  *		memory->last_error_code and ememoa_mempool_error2string to know why.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-int	ememoa_mempool_fixed_push_object (int	mempool,
-					  void	*ptr)
+struct ememoa_mempool_fixed_push_ctx_s
 {
-   unsigned int				i;
-   unsigned int				size;
-   void*				*objects_pool;
-   void*				ptr_inf;
+   void                                 *ptr;
+   uint8_t                              *ptr_inf;
+   struct ememoa_mempool_fixed_s        *memory;
+};
 
-   EMEMOA_CHECK_MAGIC(all_fixed_pool[mempool]);
+static int
+ememoa_mempool_fixed_push_object_cb (void *ctx, int index, void *data)
+{
+   struct ememoa_mempool_fixed_push_ctx_s       *pctx = ctx;
+   struct ememoa_mempool_fixed_pool_s           *pool = data;
 
-   size = all_fixed_pool[mempool].object_size * all_fixed_pool[mempool].max_objects;
-   ptr_inf = ptr - size;
+   (void) index;
 
-   objects_pool = all_fixed_pool[mempool].objects_pool;
-   for (i = 0; i < all_fixed_pool[mempool].allocated_pool;
-	++i, ++objects_pool)
+   if (pool->objects_pool <= pctx->ptr && pctx->ptr_inf <= ((uint8_t*) pool->objects_pool))
      {
-	if (*objects_pool <= ptr && ptr_inf <= (void*)((uint8_t*) *objects_pool))
-	  {
-	     bitmask_t		*objects_use = all_fixed_pool[mempool].objects_use[i];
-	     bitmask_t		mask = 1;
-	     /*
-	       High risk, if one day sizeof (unsigned long) > sizeof (void*)
-	       something will go wrong...
-	     */
-	     unsigned long	position = ((uint8_t*) ptr - (uint8_t*) *objects_pool) / all_fixed_pool[mempool].object_size;
-	     unsigned int	index_h = EMEMOA_INDEX_HIGH(position);
-	     unsigned int	index_l = EMEMOA_INDEX_LOW(position);
+        bitmask_t		*objects_use = pool->objects_use;
+        bitmask_t		mask = 1;
+        /*
+          High risk, if one day sizeof (unsigned long) > sizeof (void*)
+          something will go wrong...
+        */
+        unsigned long	position = ((uint8_t*) pctx->ptr - (uint8_t*) pool->objects_pool) / pctx->memory->object_size;
+        unsigned int	index_h = EMEMOA_INDEX_HIGH(position);
+        unsigned int	index_l = EMEMOA_INDEX_LOW(position);
 
-	     mask <<= index_l;
+        mask <<= index_l;
 
-	     EMEMOA_LOCK(all_fixed_pool[mempool]);
+        EMEMOA_LOCK(pctx->memory);
 
 #ifdef DEBUG
-	     (all_fixed_pool[mempool].out_objects)--;
-	     if (objects_use[index_h] & mask)
-	       {
-		  all_fixed_pool[mempool].last_error_code = EMEMOA_DOUBLE_PUSH;
-	      
-		  EMEMOA_UNLOCK(all_fixed_pool[mempool]);
-		  return -1;
-	       }
+        pctx->memory->out_objects--;
+        if (objects_use[index_h] & mask)
+          {
+             pctx->memory->last_error_code = EMEMOA_DOUBLE_PUSH;
+
+             EMEMOA_UNLOCK(pctx->memory);
+             return 1;
+          }
 #endif
 
-	     objects_use[index_h] |= mask;
-	     (all_fixed_pool[mempool].available_objects[i])++;
+        objects_use[index_h] |= mask;
+        pool->available_objects++;
 
-	     if (all_fixed_pool[mempool].jump_object[i] > index_h)
-	       all_fixed_pool[mempool].jump_object[i] = index_h;
+        if (pool->jump_object > index_h)
+          pool->jump_object = index_h;
 
-	     if (all_fixed_pool[mempool].jump_pool > i)
-	       all_fixed_pool[mempool].jump_pool = i;
+        if (pctx->memory->jump_pool > index)
+          pctx->memory->jump_pool = index;
 
-	     EMEMOA_UNLOCK(all_fixed_pool[mempool]);
-	     return 0;
-	  }
+        EMEMOA_UNLOCK(pctx->memory);
+        return 1;
      }
+   return 0;
+}
 
-   all_fixed_pool[mempool].last_error_code = EMEMOA_ERROR_PUSH_ADRESS_NOT_FOUND;
+int
+ememoa_mempool_fixed_push_object (int	mempool,
+                                  void	*ptr)
+{
+   struct ememoa_mempool_fixed_s                *memory = ememoa_mempool_fixed_get_index(mempool);
+   struct ememoa_mempool_fixed_pool_s           *pool;
+   struct ememoa_mempool_fixed_push_ctx_s       pctx;
+   unsigned int                                 size;
+
+   EMEMOA_CHECK_MAGIC(memory);
+
+   size = memory->object_size * memory->max_objects;
+
+   pctx.ptr = ptr;
+   pctx.ptr_inf = ((uint8_t*) ptr) - size;
+   pctx.memory = memory;
+
+   pool = ememoa_memory_base_resize_list_search_over (memory->base,
+                                                      0,
+                                                      -1,
+                                                      ememoa_mempool_fixed_push_object_cb,
+                                                      &pctx,
+                                                      NULL);
+
+   if (pool)
+     return 0;
+
+   memory->last_error_code = EMEMOA_ERROR_PUSH_ADRESS_NOT_FOUND;
    return -1;
 }
 
@@ -585,27 +609,66 @@ int	ememoa_mempool_fixed_push_object (int	mempool,
  * @ingroup	Ememoa_Alloc_Mempool
  */
 static int
-ememoa_used_pool (struct ememoa_mempool_fixed_s *memory)
+ememoa_used_pool_cb (void *ctx, int index, void *data)
 {
-   unsigned int	i;
-   unsigned int	retour;
+   struct ememoa_mempool_fixed_s        *memory = ctx;
+   struct ememoa_mempool_fixed_pool_s   *pool = data;
 
-   for (i = 0, retour = 0;
-	i < memory->allocated_pool;
-	++i)
-     if (memory->available_objects[i] != memory->max_objects)
-       ++retour;
-     else
-       {
-	  free (memory->objects_use[i]);
-	  free (memory->objects_pool[i]);
+   (void) index;
 
-	  memory->objects_use[i] = NULL;
-	  memory->objects_pool[i] = NULL;
-	  memory->available_objects[i] = 0;
-       }
+   if (pool->available_objects != memory->max_objects)
+     return 1;
 
-   return retour;
+   ememoa_memory_base_free (pool->objects_use);
+   ememoa_memory_base_free (pool->objects_pool);
+
+   pool->objects_use = NULL;
+   pool->objects_pool = NULL;
+   pool->available_objects = 0;
+
+   ememoa_memory_base_resize_list_back (memory->base, index);
+   return 0;
+}
+
+static int
+ememoa_mempool_fixed_garbage_collect_struct (struct ememoa_mempool_fixed_s *memory)
+{
+   unsigned int				allocated_pool = 0;
+
+   EMEMOA_CHECK_MAGIC(memory);
+
+   if (memory->base->count == 0)
+     return 0;
+
+   EMEMOA_LOCK(memory);
+
+   allocated_pool = ememoa_memory_base_resize_list_walk_over (memory->base,
+                                                              0,
+                                                              -1,
+                                                              ememoa_used_pool_cb,
+                                                              memory);
+
+   if (allocated_pool == memory->base->count)
+     {
+	EMEMOA_UNLOCK(memory);
+
+	memory->last_error_code = EMEMOA_NO_EMPTY_POOL;
+	return -1;
+     }
+
+   if (allocated_pool != 0)
+     {
+        ememoa_memory_base_resize_list_garbage_collect (memory->base);
+
+        return 0;
+     }
+
+   ememoa_memory_base_resize_list_clean (memory->base);
+   memory->base = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_fixed_pool_s));
+
+   EMEMOA_UNLOCK(memory);
+
+   return 0;
 }
 
 /**
@@ -630,63 +693,9 @@ ememoa_used_pool (struct ememoa_mempool_fixed_s *memory)
 int
 ememoa_mempool_fixed_garbage_collect(int mempool)
 {
-   unsigned int				i, j;
-   unsigned int				allocated_pool = 0;
-   unsigned int				*available_objects = NULL;
-   bitmask_t				**objects_use = NULL;
-   void					**objects_pool = NULL;
+   struct ememoa_mempool_fixed_s        *memory = ememoa_mempool_fixed_get_index(mempool);
 
-   EMEMOA_CHECK_MAGIC(all_fixed_pool[mempool]);
-
-   if (all_fixed_pool[mempool].allocated_pool == 0)
-     return 0;
-
-   EMEMOA_LOCK(all_fixed_pool[mempool]);
-
-   allocated_pool = ememoa_used_pool (all_fixed_pool + mempool);
-
-   if (allocated_pool == all_fixed_pool[mempool].allocated_pool)
-     {
-	EMEMOA_UNLOCK(all_fixed_pool[mempool]);
-
-	all_fixed_pool[mempool].last_error_code = EMEMOA_NO_EMPTY_POOL;
-	return -1;
-     }
-
-   if (allocated_pool != 0)
-     {
-	available_objects = malloc (sizeof (unsigned int) * allocated_pool);
-	objects_use = malloc (sizeof (bitmask_t*) * allocated_pool);
-	objects_pool = malloc (sizeof (void*) * allocated_pool);
-      
-	for (i = 0, j = 0;
-	     i < all_fixed_pool[mempool].allocated_pool;
-	     ++i)
-	  if (all_fixed_pool[mempool].objects_use[i] != NULL)
-	    {
-	       available_objects[j] = all_fixed_pool[mempool].available_objects[i];
-	       objects_use[j] = all_fixed_pool[mempool].objects_use[i];
-	       objects_pool[j] = all_fixed_pool[mempool].objects_pool[i];
-	       ++j;
-	    }
-     }
-
-   free (all_fixed_pool[mempool].available_objects);
-   free (all_fixed_pool[mempool].objects_use);
-   free (all_fixed_pool[mempool].objects_pool);
-
-   all_fixed_pool[mempool].allocated_pool = allocated_pool;
-   all_fixed_pool[mempool].available_objects =  available_objects;
-   all_fixed_pool[mempool].objects_use = (void*) objects_use;
-   all_fixed_pool[mempool].objects_pool = objects_pool;
-
-#ifdef DEBUG
-   all_fixed_pool[mempool].total_objects = all_fixed_pool[mempool].object_size * all_fixed_pool[mempool].allocated_pool;
-#endif
-
-   EMEMOA_UNLOCK(all_fixed_pool[mempool]);
-
-   return 0;
+   return ememoa_mempool_fixed_garbage_collect_struct (memory);
 }
 
 /**
@@ -706,69 +715,94 @@ ememoa_mempool_fixed_garbage_collect(int mempool)
  * @return	Will return @c 0 if some pools were freed.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-int
-ememoa_mempool_fixed_garbage_collect_all(void)
+
+static int
+ememoa_memory_base_walk_over_gc_cb (void *ctx, int index, void *data)
 {
-   int	i;
-   int	result = -1;
+   struct ememoa_mempool_fixed_s        *memory = data;
+   (void) index; (void) ctx;
 
-   for (i = 0; i < all_fixed_pool_count; ++i)
-     if (all_fixed_pool[i].in_use == 1)
-       result &= ememoa_mempool_fixed_garbage_collect (i);
+   return ememoa_mempool_fixed_garbage_collect_struct (memory);
+}
 
-   return result;
+int
+ememoa_mempool_fixed_garbage_collect_all (void)
+{
+   return ememoa_memory_base_resize_list_walk_over (fixed_pool_list, 0, -1, ememoa_memory_base_walk_over_gc_cb, NULL);
 }
 
 /**
  * Executes fctl on all allocated data in the pool. If the execution of fctl returns something
- * else than 0, then the walk ends and returns the error code provided by fctl. 
+ * else than 0, then the walk ends and returns the error code provided by fctl.
  *
  * @param	mempool		Index of a valid memory pool. If the pool was already clean
  *				bad things will happen to your program.
  * @param	fctl		Function pointer that must be run on all allocated
  *				objects.
- * @param	data		Pointer that will be passed as is to each call to fctl.	
+ * @param	data		Pointer that will be passed as is to each call to fctl.
  * @return	Will return @c 0 if the run walked over all allocated objects.
  * @ingroup	Ememoa_Mempool_Fixed
  */
+struct ememoa_mempool_fixed_walk_ctx_s
+{
+   struct ememoa_mempool_fixed_s        *memory;
+   ememoa_fctl                          fctl;
+   void                                 *data;
+   int                                  error;
+};
+
+static int
+ememoa_mempool_fixed_walk_over_cb (void *ctx, int index, void *data)
+{
+   struct ememoa_mempool_fixed_pool_s           *pool = data;
+   struct ememoa_mempool_fixed_walk_ctx_s       *wctx = ctx;
+   uint8_t                                      *start_adress = pool->objects_pool;
+   bitmask_t                                    *objects_use = pool->objects_use;
+   unsigned int                                 j, k;
+
+   (void) index;
+
+   for (j = 0; j < wctx->memory->max_objects_poi; ++j)
+     {
+        bitmask_t	value = *objects_use++;
+
+        for (k = 0;
+             k < (1 << BITMASK_POWER);
+             ++k, value >>= 1, start_adress += wctx->memory->object_size)
+          if ((value & 1) == 0)
+            {
+               wctx->error = wctx->fctl (start_adress, wctx->data);
+               if (wctx->error)
+                 return -1;
+            }
+     }
+   return 0;
+}
+
 int
 ememoa_mempool_fixed_walk_over (int		mempool,
 				ememoa_fctl	fctl,
 				void		*data)
 {
-   unsigned int				i, j, k;
+   struct ememoa_mempool_fixed_s                *memory = ememoa_mempool_fixed_get_index (mempool);
+   struct ememoa_mempool_fixed_walk_ctx_s       wctx;
 
-   EMEMOA_CHECK_MAGIC(all_fixed_pool[mempool]);
+   EMEMOA_CHECK_MAGIC(memory);
+   EMEMOA_LOCK(memory);
 
-   EMEMOA_LOCK(all_fixed_pool[mempool]);
+   wctx.memory = memory;
+   wctx.data = data;
+   wctx.fctl = fctl;
 
-   for (i = 0; i < all_fixed_pool[mempool].allocated_pool; ++i)
-     {
-	uint8_t		*start_adress = all_fixed_pool[mempool].objects_pool[i];
-	bitmask_t	*objects_use = all_fixed_pool[mempool].objects_use[i];
+   ememoa_memory_base_resize_list_search_over (memory->base,
+                                               0,
+                                               -1,
+                                               ememoa_mempool_fixed_walk_over_cb,
+                                               &wctx,
+                                               NULL);
 
-	for (j = 0; j < all_fixed_pool[mempool].max_objects_poi; ++j)
-	  {
-	     bitmask_t	value = *objects_use++;
-	     
-	     for (k = 0; k < (1 << BITMASK_POWER);
-		  ++k,
-		    value >>= 1,
-		    start_adress += all_fixed_pool[mempool].object_size)
-	       if ((value & 1) == 0)
-		 {
-		    int	error = fctl (start_adress, data);
-		    if (error)
-		      {
-			 EMEMOA_UNLOCK(all_fixed_pool[mempool]);
-			 return error;
-		      }
-		 }
-	  }
-     }
-
-   EMEMOA_UNLOCK(all_fixed_pool[mempool]);
-   return 0;
+   EMEMOA_UNLOCK(memory);
+   return wctx.error;
 }
 
 /**
@@ -784,18 +818,22 @@ ememoa_mempool_fixed_walk_over (int		mempool,
  * @param	index		Pool's index in the mempool.
  * @ingroup	Ememoa_Display_Mempool
  */
-static void
-ememoa_mempool_fixed_display_pool (struct ememoa_mempool_fixed_s *memory, unsigned int index)
+static int
+ememoa_mempool_fixed_display_pool_cb (void *ctx, int index, void *data)
 {
+   struct ememoa_mempool_fixed_s        *memory = ctx;
+   struct ememoa_mempool_fixed_pool_s   *pool = data;
    unsigned int				i, j;
    char					display[64] = "";
    bitmask_t				value;
    unsigned long			bound_l, bound_h;
-   
-   bound_l = EMEMOA_EVAL_BOUND_LOW(memory->objects_pool[index]);
-   bound_h = EMEMOA_EVAL_BOUND_HIGH(memory->objects_pool[index], (*memory));
-  
-   printf ("Available objects: %i\n", memory->available_objects[index]);
+
+   (void) index;
+
+   bound_l = EMEMOA_EVAL_BOUND_LOW(pool->objects_pool);
+   bound_h = EMEMOA_EVAL_BOUND_HIGH(pool->objects_pool, (*memory));
+
+   printf ("Available objects: %i\n", pool->available_objects);
    printf ("Start at: %p, end at: %p\n", (void*) bound_l, (void*) bound_h);
 
    if (bound_l != 0)
@@ -803,8 +841,8 @@ ememoa_mempool_fixed_display_pool (struct ememoa_mempool_fixed_s *memory, unsign
 	display[(1 << BITMASK_POWER)] = '\0';
 	for (i = 0; i < memory->max_objects_poi; ++i)
 	  {
-	     bitmask_t	*objects_use = memory->objects_use[index];
-	     
+	     bitmask_t	*objects_use = pool->objects_use;
+
 	     value = objects_use[i];
 	     for (j = 0; j < (1 << BITMASK_POWER); ++j, value >>= 1)
 	       /*
@@ -814,13 +852,15 @@ ememoa_mempool_fixed_display_pool (struct ememoa_mempool_fixed_s *memory, unsign
 	       display[j] = (value & 1) ? '.' : '|';
 
 	     if (i & 1)
-	       printf("%s\n", display);
+	       printf ("%s\n", display);
 	     else
-	       printf("%s", display);
+	       printf ("%s", display);
 	  }
 	if (i & 1)
-	  printf("\n");
+	  printf ("\n");
      }
+
+   return 0;
 }
 
 /**
@@ -831,56 +871,53 @@ ememoa_mempool_fixed_display_pool (struct ememoa_mempool_fixed_s *memory, unsign
  * @ingroup	Ememoa_Display_Mempool
  */
 void
-ememoa_mempool_fixed_display_statistic (int	mempool)
+ememoa_mempool_fixed_display_statistic (int mempool)
 {
-   unsigned int				i;
-   
-   printf ("Memory information for pool located at : %p\n", (void*) all_fixed_pool + mempool);
-   
-   EMEMOA_LOCK(all_fixed_pool[mempool]);
+   struct ememoa_mempool_fixed_s        *memory = ememoa_mempool_fixed_get_index (mempool);
 
-   if (all_fixed_pool[mempool].desc && all_fixed_pool[mempool].desc->name)
-     printf ("This pool contains : %s.\n", all_fixed_pool[mempool].desc->name);
+   printf ("Memory information for pool located at : %p\n", (void*) memory);
+
+   EMEMOA_LOCK(memory);
 
 #ifdef	DEBUG
-   printf ("Memory magic is : %x\n", all_fixed_pool[mempool].magic);
-   if (all_fixed_pool[mempool].magic != EMEMOA_MAGIC)
+   printf ("Memory magic is : %x\n", memory->magic);
+   if (memory->magic != EMEMOA_MAGIC)
      return ;
 #endif
 
-   if (all_fixed_pool[mempool].in_use != 1)
-     return ;
+   if (memory->desc && memory->desc->name)
+     printf ("This pool contains : %s.\n", memory->desc->name);
 
-   printf ("Objects per pool: %i[%x] (for poi: %i, pot: %i)\n", all_fixed_pool[mempool].max_objects, all_fixed_pool[mempool].max_objects, all_fixed_pool[mempool].max_objects_poi, all_fixed_pool[mempool].max_objects_pot);
-   printf ("Object size: %i\n", all_fixed_pool[mempool].object_size);
-   printf ("Allocated pool: %i\n", all_fixed_pool[mempool].allocated_pool);
+   printf ("Objects per pool: %i[%x] (for poi: %i, pot: %i)\n", memory->max_objects, memory->max_objects, memory->max_objects_poi, memory->max_objects_pot);
+   printf ("Object size: %i\n", memory->object_size);
+   printf ("Allocated pool: %i\n", memory->base->count);
 
 #ifdef DEBUG
-   printf ("Objects currently delivered: %i.\n", all_fixed_pool[mempool].out_objects);
-   printf ("Total objects currently in pool: %i.\n", all_fixed_pool[mempool].total_objects);
-   printf ("Maximum delivered objects since the birth of the memory pool: %i.\n", all_fixed_pool[mempool].max_out_objects);
+   printf ("Objects currently delivered: %i.\n", memory->out_objects);
+   printf ("Total objects currently in pool: %i.\n", memory->max_objects * memory->base->delivered);
+   printf ("Maximum delivered objects since the birth of the memory pool: %i.\n", memory->max_out_objects);
 #endif
 
-   for (i = 0; i < all_fixed_pool[mempool].allocated_pool; ++i)
-     {
-	printf ("== %i ==\n", i);
-	ememoa_mempool_fixed_display_pool(all_fixed_pool + mempool, i);
-     }
+   ememoa_memory_base_resize_list_walk_over (memory->base,
+                                             0,
+                                             -1,
+                                             ememoa_mempool_fixed_display_pool_cb,
+                                             memory);
 
-   if (all_fixed_pool[mempool].desc)
+   if (memory->desc)
      {
-	char*	name = alloca (strlen(all_fixed_pool[mempool].desc->name ? all_fixed_pool[mempool].desc->name : ""));
-	strcpy (name, all_fixed_pool[mempool].desc->name);
+	char*	name = alloca (strlen(memory->desc->name ? memory->desc->name : ""));
+	strcpy (name, memory->desc->name);
 
-	if (all_fixed_pool[mempool].desc->data_display)
+	if (memory->desc->data_display)
 	  {
 	     printf ("=== Content ===\n");
-	     ememoa_mempool_fixed_walk_over (mempool, all_fixed_pool[mempool].desc->data_display, name);
+	     ememoa_mempool_fixed_walk_over (mempool, memory->desc->data_display, name);
 	     printf ("=== ===\n");
 	  }
      }
 
-   EMEMOA_UNLOCK(all_fixed_pool[mempool]);
+   EMEMOA_UNLOCK(memory);
 }
 
 /**
@@ -890,20 +927,30 @@ ememoa_mempool_fixed_display_statistic (int	mempool)
  *				bad things will happen to your program.
  * @ingroup	Ememoa_Display_Mempool
  */
-void
-ememoa_mempool_fixed_display_statistic_all(void)
+static int
+ememoa_mempool_fixed_display_statistic_count_cb (void* ctx, int index, void *data)
 {
-   int	i = 0;
-   int	result = 0;
+   (void) ctx; (void) index; (void) data;
 
-   for (i = 0; i < all_fixed_pool_count; ++i)
-     if (all_fixed_pool[i].in_use == 1)
-       ++result;
+   return 1;
+}
 
-   printf ("%i mempool are used in %i currently allocated.\n", result, all_fixed_pool_count);
+static int
+ememoa_mempool_fixed_display_statistic_cb (void* ctx, int index, void *data)
+{
+   (void) ctx; (void) data;
 
-   for (i = 0; i < all_fixed_pool_count; ++i)
-     if (all_fixed_pool[i].in_use == 1)
-       ememoa_mempool_fixed_display_statistic (i);
+   ememoa_mempool_fixed_display_statistic (index);
+   return 0;
+}
+
+void
+ememoa_mempool_fixed_display_statistic_all (void)
+{
+   int                                  result = 0;
+
+   result = ememoa_memory_base_resize_list_walk_over (fixed_pool_list, 0, -1, ememoa_mempool_fixed_display_statistic_count_cb, NULL);
+   printf ("%i mempool are used in %i currently allocated.\n", result, fixed_pool_list->count);
+   ememoa_memory_base_resize_list_walk_over (fixed_pool_list, 0, -1, ememoa_mempool_fixed_display_statistic_cb, NULL);
 }
 

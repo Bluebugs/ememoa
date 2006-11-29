@@ -25,26 +25,27 @@ ememoa_mempool_error2string (ememoa_mempool_error_t error_code)
       return "Address doesn't belong to the pool.";
     case EMEMOA_NO_EMPTY_POOL:
       return "All pool still have some allocated objects. Impossible to give back any pool to the system.";
+    case EMEMOA_INVALID_MEMPOOL:
+       return "Invalid memory pool index.";
     default:
       return "Unknown error code !!";
     }
   return NULL;
 }
 
-extern struct ememoa_mempool_fixed_s		*all_fixed_pool;
-
 ememoa_mempool_error_t
 ememoa_mempool_fixed_get_last_error (unsigned int	mempool)
 {
-   struct ememoa_mempool_fixed_s	*memory = all_fixed_pool + mempool;
+   struct ememoa_mempool_fixed_s	*memory = ememoa_mempool_fixed_get_index(mempool);
    return memory->last_error_code;
 }
+
 
 extern struct ememoa_mempool_unknown_size_s	*all_unknown_size_pool;
 
 ememoa_mempool_error_t
 ememoa_mempool_unknown_size_get_last_error (unsigned int	mempool)
 {
-   struct ememoa_mempool_unknown_size_s	*memory = all_unknown_size_pool + mempool;
-   return memory->last_error_code;
+   struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index (mempool);
+   return (memory) ? memory->last_error_code : EMEMOA_INVALID_MEMPOOL;
 }

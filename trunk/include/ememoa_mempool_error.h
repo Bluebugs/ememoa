@@ -19,7 +19,8 @@ typedef enum _ememoa_mempool_error_e
     EMEMOA_ERROR_PUSH_ADRESS_NOT_FOUND,
     EMEMOA_NO_EMPTY_POOL,
     EMEMOA_DOUBLE_PUSH,
-    EMEMOA_NO_MORE_MEMORY
+    EMEMOA_NO_MORE_MEMORY,
+    EMEMOA_INVALID_MEMPOOL
   } ememoa_mempool_error_t;
 
 const char*

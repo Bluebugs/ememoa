@@ -41,7 +41,7 @@ int test1_run(unsigned int limit)
        }
 
    ememoa_mempool_fixed_display_statistic (test_zone);
-  
+
    free (tbl);
    return 0;
 }
@@ -52,9 +52,9 @@ int test1_run(unsigned int limit)
 int main(void)
 {
    int retour = 0;
-   
+
    test_zone = ememoa_mempool_fixed_init (sizeof (int), MAX_POOL, 0, NULL);
-   
+
    if ((retour = test1_run(2000)) != 0)
      return retour;
    if ((retour = test1_run (3000)) != 0)
@@ -66,6 +66,6 @@ int main(void)
      }
    if ((retour = test1_run (100)) != 0)
      return retour;
-   
+
    return 0;
 }
