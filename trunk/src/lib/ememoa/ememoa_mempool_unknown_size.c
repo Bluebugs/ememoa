@@ -8,6 +8,7 @@
 #include <string.h>
 #include <strings.h>
 #include <assert.h>
+#include <stdio.h>
 
 #ifdef HAVE_PTHREAD
 #include <pthread.h>
@@ -207,10 +208,12 @@ int
 ememoa_mempool_unknown_size_clean (unsigned int		mempool)
 {
    struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index (mempool);
+   unsigned int                         i;
 
    EMEMOA_CHECK_MAGIC(memory);
 
-   ememoa_mempool_unknown_size_free_all_objects (mempool);
+   for (i = 0; i < memory->pools_count; ++i)
+     ememoa_mempool_fixed_clean (memory->pools[i]);
 
 #ifdef HAVE_PTHREAD
    pthread_mutex_destroy (&(memory->lock));
