@@ -108,7 +108,8 @@ new_ememoa_fixed_pool ()
    if (!fixed_pool_list)
      fixed_pool_list = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_fixed_s));
 
-   assert (fixed_pool_list != NULL);
+   if (fixed_pool_list == NULL)
+     return -1;
 
    return ememoa_memory_base_resize_list_new_item (fixed_pool_list);
 }
@@ -116,7 +117,8 @@ new_ememoa_fixed_pool ()
 struct ememoa_mempool_fixed_s*
 ememoa_mempool_fixed_get_index (unsigned int index)
 {
-   assert (fixed_pool_list != NULL);
+   if (fixed_pool_list == NULL)
+     return NULL;
 
    return ememoa_memory_base_resize_list_get_item (fixed_pool_list, index);
 }
@@ -124,9 +126,8 @@ ememoa_mempool_fixed_get_index (unsigned int index)
 static void
 ememoa_mempool_fixed_back (unsigned int index)
 {
-   assert (fixed_pool_list != NULL);
-
-   ememoa_memory_base_resize_list_back (fixed_pool_list, index);
+   if (fixed_pool_list)
+     ememoa_memory_base_resize_list_back (fixed_pool_list, index);
 }
 
 /**
@@ -173,9 +174,11 @@ ememoa_mempool_fixed_init (unsigned int				object_size,
    struct ememoa_mempool_fixed_s	*memory = ememoa_mempool_fixed_get_index(index);
 
    if (index == -1)
-     return index;
+     return -1;
 
-   assert(memory != NULL);
+   if (memory == NULL)
+     return -1;
+
    assert(object_size > 0);
    assert(preallocated_item_pot > 0);
 
@@ -200,13 +203,6 @@ ememoa_mempool_fixed_init (unsigned int				object_size,
 
    memory->base = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_fixed_pool_s));
    memory->jump_pool = 0;
-   /*
-   memory->allocated_pool = 0;
-   memory->jump_object = NULL;
-   memory->objects_pool = NULL;
-   memory->available_objects = NULL;
-   memory->objects_use = NULL;
-   */
    memory->options = options;
 
 #ifdef HAVE_PTHREAD
@@ -287,15 +283,6 @@ set_adress (unsigned int	index_l,
      *jump_object_slot += (*jump_object_slot == index_h) ? 1 : 0;
 }
 
-#define	EMEMOA_CHECK_UPDATE_POINTER(Pointer, Value) \
-	if (Pointer != NULL) \
-		memory->Pointer = Pointer; \
-	else \
-	{ \
-		memory->last_error_code = Value; \
-		failed = -1; \
-	}
-
 /**
  * Allocate a new empty pool inside a Mempool
  *
@@ -313,7 +300,8 @@ add_pool (struct ememoa_mempool_fixed_s *memory)
    index = ememoa_memory_base_resize_list_new_item (memory->base);
    pool = ememoa_memory_base_resize_list_get_item (memory->base, index);
 
-   assert(pool != NULL);
+   if (pool == NULL)
+     return NULL;
 
    pool->objects_use = ememoa_memory_base_alloc (sizeof (bitmask_t) * memory->max_objects_poi);
    pool->objects_pool = ememoa_memory_base_alloc (EMEMOA_SIZEOF_POOL(memory));
