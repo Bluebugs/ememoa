@@ -285,8 +285,9 @@ ememoa_memory_base_resize_list_new (unsigned int size)
 
    tmp = ememoa_memory_base_alloc (sizeof (struct ememoa_memory_base_resize_list_s));
 
-   assert(tmp != NULL);
-
+   if (tmp == NULL)
+     return NULL;
+   
    bzero (tmp, sizeof (struct ememoa_memory_base_resize_list_s));
    tmp->size = size;
 
@@ -356,8 +357,8 @@ ememoa_memory_base_resize_list_new_item (struct ememoa_memory_base_resize_list_s
      }
 
    start = ememoa_memory_base_alloc (sizeof (struct ememoa_memory_base_resize_list_s));
-
-   assert(start != NULL);
+   if (start == NULL)
+     return -1;
 
    start->used = 0xFFFFFFFE;
    start->next = base->start;
@@ -390,6 +391,9 @@ ememoa_memory_base_resize_list_get_item (struct ememoa_memory_base_resize_list_s
 
    EMEMOA_CHECK_MAGIC(base);
 
+   if (index < 0)
+     return NULL;
+
    j = index >> 5;
    i = index & 0x1F;
 
@@ -418,6 +422,9 @@ ememoa_memory_base_resize_list_back (struct ememoa_memory_base_resize_list_s *ba
    unsigned int                                 j;
 
    EMEMOA_CHECK_MAGIC(base);
+
+   if (index < 0)
+     return ;
 
    j = index >> 5;
    i = index & 0x1F;

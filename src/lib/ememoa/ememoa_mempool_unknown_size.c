@@ -38,7 +38,6 @@
 
 #ifdef DEBUG
 #define	EMEMOA_CHECK_MAGIC(Memory) \
-	assert(Memory != NULL); \
 	assert(Memory->magic == EMEMOA_MAGIC);
 #else
 #define	EMEMOA_CHECK_MAGIC(Memory) ;
@@ -210,6 +209,9 @@ ememoa_mempool_unknown_size_clean (unsigned int		mempool)
    struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index (mempool);
    unsigned int                         i;
 
+   if (memory == NULL)
+     return -1;
+
    EMEMOA_CHECK_MAGIC(memory);
 
    for (i = 0; i < memory->pools_count; ++i)
@@ -244,6 +246,9 @@ ememoa_mempool_unknown_size_free_all_objects (unsigned int	mempool)
 {
    struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(mempool);
    unsigned int				i;
+
+   if (memory == NULL)
+     return -1;
 
    EMEMOA_CHECK_MAGIC(memory);
 
@@ -297,7 +302,11 @@ ememoa_mempool_unknown_size_push_object (unsigned int	mempool,
    struct ememoa_mempool_unknown_size_item_s	*old = (struct ememoa_mempool_unknown_size_item_s*)ptr - 1;
    struct ememoa_mempool_unknown_size_s         *memory = ememoa_mempool_unknown_size_get_index (mempool);
 
-   assert (ptr != NULL);
+   if (ptr == NULL)
+     return -1;
+
+   if (memory == NULL)
+     return -1;
 
    EMEMOA_CHECK_MAGIC(memory);
    EMEMOA_CHECK_MAGIC(old);
@@ -339,6 +348,9 @@ ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
    struct ememoa_mempool_unknown_size_s         *memory = ememoa_mempool_unknown_size_get_index (mempool);
    void*                                        new;
    unsigned int                                 copy;
+
+   if (memory == NULL)
+     return NULL;
 
    EMEMOA_CHECK_MAGIC(memory);
 
@@ -403,6 +415,9 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
    struct ememoa_mempool_unknown_size_s		*memory = ememoa_mempool_unknown_size_get_index (mempool);
    struct ememoa_mempool_unknown_size_item_s	*new = NULL;
    unsigned int					i;
+
+   if (memory == NULL)
+     return NULL;
 
    EMEMOA_CHECK_MAGIC(memory);
 
@@ -486,6 +501,9 @@ ememoa_mempool_unknown_size_garbage_collect (unsigned int mempool)
    unsigned int				i;
    int					count = 0;
 
+   if (memory == NULL)
+     return -1;
+
    EMEMOA_CHECK_MAGIC(memory);
 
    for (i = 0; i < memory->pools_count; ++i)
@@ -516,6 +534,9 @@ ememoa_mempool_unknown_size_walk_over    (unsigned    int   mempool,
    unsigned int i;
    int error = 0;
 
+   if (memory == NULL)
+     return -1;
+
    EMEMOA_CHECK_MAGIC(memory);
 
    for (i = 0; i < memory->pools_count; ++i)
@@ -542,6 +563,9 @@ ememoa_mempool_unknown_size_display_statistic (unsigned int mempool)
 {
    struct ememoa_mempool_unknown_size_s	*memory = ememoa_mempool_unknown_size_get_index(mempool);
    unsigned int				i;
+
+   if (memory == NULL)
+     return ;
 
    EMEMOA_CHECK_MAGIC(memory);
 
