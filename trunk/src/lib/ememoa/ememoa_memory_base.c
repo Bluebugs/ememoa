@@ -240,7 +240,9 @@ ememoa_memory_base_init_64m (void* buffer, unsigned int size)
    if (temp_size <= 1)
      return -1;
 
+#ifdef DEBUG
    new_64m->magic = EMEMOA_MAGIC;
+#endif
    new_64m->chunks = (struct ememoa_memory_base_chunck_s*) ((struct ememoa_memory_base_s*) new_64m + 1);
    new_64m->pages = (uint16_t*)((struct ememoa_memory_base_chunck_s*) new_64m->chunks + temp_size + 1);
    new_64m->base = ((uint16_t*) new_64m->pages + temp_size + 1);
