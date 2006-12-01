@@ -49,7 +49,9 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 am__EXEEXT_1 = test01$(EXEEXT) test02$(EXEEXT) test03$(EXEEXT) \
-	test04$(EXEEXT) test05$(EXEEXT)
+	test04$(EXEEXT) test05$(EXEEXT) test06$(EXEEXT) \
+	test07$(EXEEXT) test08$(EXEEXT) test09$(EXEEXT) \
+	test10$(EXEEXT)
 test01_SOURCES = test01.c
 test01_OBJECTS = test01.$(OBJEXT)
 test01_LDADD = $(LDADD)
@@ -70,6 +72,26 @@ test05_SOURCES = test05.c
 test05_OBJECTS = test05.$(OBJEXT)
 test05_LDADD = $(LDADD)
 test05_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test06_SOURCES = test06.c
+test06_OBJECTS = test06.$(OBJEXT)
+test06_LDADD = $(LDADD)
+test06_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test07_SOURCES = test07.c
+test07_OBJECTS = test07.$(OBJEXT)
+test07_LDADD = $(LDADD)
+test07_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test08_SOURCES = test08.c
+test08_OBJECTS = test08.$(OBJEXT)
+test08_LDADD = $(LDADD)
+test08_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test09_SOURCES = test09.c
+test09_OBJECTS = test09.$(OBJEXT)
+test09_LDADD = $(LDADD)
+test09_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test10_SOURCES = test10.c
+test10_OBJECTS = test10.$(OBJEXT)
+test10_LDADD = $(LDADD)
+test10_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__depfiles_maybe = depfiles
@@ -81,8 +103,10 @@ LTCOMPILE = $(LIBTOOL) --tag=CC --mode=compile $(CC) $(DEFS) \
 CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = test01.c test02.c test03.c test04.c test05.c
-DIST_SOURCES = test01.c test02.c test03.c test04.c test05.c
+SOURCES = test01.c test02.c test03.c test04.c test05.c test06.c \
+	test07.c test08.c test09.c test10.c
+DIST_SOURCES = test01.c test02.c test03.c test04.c test05.c test06.c \
+	test07.c test08.c test09.c test10.c
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -192,7 +216,12 @@ TESTS = \
 	test02					\
 	test03					\
 	test04					\
-	test05
+	test05					\
+	test06					\
+	test07					\
+	test08					\
+	test09					\
+	test10
 
 INCLUDES = -I$(top_srcdir)/include
 LDADD = $(top_builddir)/src/lib/ememoa/libememoa.la
@@ -252,6 +281,21 @@ test04$(EXEEXT): $(test04_OBJECTS) $(test04_DEPENDENCIES)
 test05$(EXEEXT): $(test05_OBJECTS) $(test05_DEPENDENCIES) 
 	@rm -f test05$(EXEEXT)
 	$(LINK) $(test05_LDFLAGS) $(test05_OBJECTS) $(test05_LDADD) $(LIBS)
+test06$(EXEEXT): $(test06_OBJECTS) $(test06_DEPENDENCIES) 
+	@rm -f test06$(EXEEXT)
+	$(LINK) $(test06_LDFLAGS) $(test06_OBJECTS) $(test06_LDADD) $(LIBS)
+test07$(EXEEXT): $(test07_OBJECTS) $(test07_DEPENDENCIES) 
+	@rm -f test07$(EXEEXT)
+	$(LINK) $(test07_LDFLAGS) $(test07_OBJECTS) $(test07_LDADD) $(LIBS)
+test08$(EXEEXT): $(test08_OBJECTS) $(test08_DEPENDENCIES) 
+	@rm -f test08$(EXEEXT)
+	$(LINK) $(test08_LDFLAGS) $(test08_OBJECTS) $(test08_LDADD) $(LIBS)
+test09$(EXEEXT): $(test09_OBJECTS) $(test09_DEPENDENCIES) 
+	@rm -f test09$(EXEEXT)
+	$(LINK) $(test09_LDFLAGS) $(test09_OBJECTS) $(test09_LDADD) $(LIBS)
+test10$(EXEEXT): $(test10_OBJECTS) $(test10_DEPENDENCIES) 
+	@rm -f test10$(EXEEXT)
+	$(LINK) $(test10_LDFLAGS) $(test10_OBJECTS) $(test10_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -264,6 +308,11 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test03.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test04.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test05.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test06.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test07.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test08.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test09.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test10.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	if $(COMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \

@@ -15,6 +15,38 @@
 # include	<pthread.h>
 #endif
 
+#include        "ememoa_memory_base.h"
+#include        "ememoa_mempool_error.h"
+
+struct ememoa_memory_base_chunck_s
+{
+   uint16_t                                     start;
+   uint16_t                                     end;
+   uint16_t                                     length;
+
+   uint16_t                                     next;
+   uint16_t                                     prev;
+
+   uint8_t                                      use;
+};
+
+struct ememoa_memory_base_s
+{
+#ifdef DEBUG
+   unsigned int                                 magic;
+#endif
+   void                                         *base;
+
+   struct ememoa_memory_base_chunck_s           *chunks;
+   uint16_t                                     *pages;
+
+   unsigned int                                 chunks_count;
+
+   uint16_t                                     start;
+   uint16_t                                     over;
+   uint16_t                                     jump;
+};
+
 struct ememoa_mempool_fixed_s
 {
 #ifdef DEBUG
