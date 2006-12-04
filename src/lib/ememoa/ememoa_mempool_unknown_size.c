@@ -375,7 +375,7 @@ ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
         if (memory->pools_match[old->index] >= size)
           return ptr;
 
-        copy = memory->pools_match[old->index] - sizeof (struct ememoa_mempool_unknown_size_item_s);
+        copy = memory->pools_match[old->index];
      }
 
    new = ememoa_mempool_unknown_size_pop_object (mempool, size);

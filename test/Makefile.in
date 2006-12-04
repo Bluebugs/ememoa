@@ -51,7 +51,8 @@ CONFIG_CLEAN_FILES =
 am__EXEEXT_1 = test01$(EXEEXT) test02$(EXEEXT) test03$(EXEEXT) \
 	test04$(EXEEXT) test05$(EXEEXT) test06$(EXEEXT) \
 	test07$(EXEEXT) test08$(EXEEXT) test09$(EXEEXT) \
-	test10$(EXEEXT)
+	test10$(EXEEXT) test11$(EXEEXT) test12$(EXEEXT) \
+	test13$(EXEEXT)
 test01_SOURCES = test01.c
 test01_OBJECTS = test01.$(OBJEXT)
 test01_LDADD = $(LDADD)
@@ -92,6 +93,18 @@ test10_SOURCES = test10.c
 test10_OBJECTS = test10.$(OBJEXT)
 test10_LDADD = $(LDADD)
 test10_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test11_SOURCES = test11.c
+test11_OBJECTS = test11.$(OBJEXT)
+test11_LDADD = $(LDADD)
+test11_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test12_SOURCES = test12.c
+test12_OBJECTS = test12.$(OBJEXT)
+test12_LDADD = $(LDADD)
+test12_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
+test13_SOURCES = test13.c
+test13_OBJECTS = test13.$(OBJEXT)
+test13_LDADD = $(LDADD)
+test13_DEPENDENCIES = $(top_builddir)/src/lib/ememoa/libememoa.la
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__depfiles_maybe = depfiles
@@ -104,9 +117,9 @@ CCLD = $(CC)
 LINK = $(LIBTOOL) --tag=CC --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
 	$(AM_LDFLAGS) $(LDFLAGS) -o $@
 SOURCES = test01.c test02.c test03.c test04.c test05.c test06.c \
-	test07.c test08.c test09.c test10.c
+	test07.c test08.c test09.c test10.c test11.c test12.c test13.c
 DIST_SOURCES = test01.c test02.c test03.c test04.c test05.c test06.c \
-	test07.c test08.c test09.c test10.c
+	test07.c test08.c test09.c test10.c test11.c test12.c test13.c
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -221,7 +234,10 @@ TESTS = \
 	test07					\
 	test08					\
 	test09					\
-	test10
+	test10					\
+	test11					\
+	test12					\
+	test13
 
 INCLUDES = -I$(top_srcdir)/include
 LDADD = $(top_builddir)/src/lib/ememoa/libememoa.la
@@ -296,6 +312,15 @@ test09$(EXEEXT): $(test09_OBJECTS) $(test09_DEPENDENCIES)
 test10$(EXEEXT): $(test10_OBJECTS) $(test10_DEPENDENCIES) 
 	@rm -f test10$(EXEEXT)
 	$(LINK) $(test10_LDFLAGS) $(test10_OBJECTS) $(test10_LDADD) $(LIBS)
+test11$(EXEEXT): $(test11_OBJECTS) $(test11_DEPENDENCIES) 
+	@rm -f test11$(EXEEXT)
+	$(LINK) $(test11_LDFLAGS) $(test11_OBJECTS) $(test11_LDADD) $(LIBS)
+test12$(EXEEXT): $(test12_OBJECTS) $(test12_DEPENDENCIES) 
+	@rm -f test12$(EXEEXT)
+	$(LINK) $(test12_LDFLAGS) $(test12_OBJECTS) $(test12_LDADD) $(LIBS)
+test13$(EXEEXT): $(test13_OBJECTS) $(test13_DEPENDENCIES) 
+	@rm -f test13$(EXEEXT)
+	$(LINK) $(test13_LDFLAGS) $(test13_OBJECTS) $(test13_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -313,6 +338,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test08.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test09.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test10.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test11.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test12.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test13.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	if $(COMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \
