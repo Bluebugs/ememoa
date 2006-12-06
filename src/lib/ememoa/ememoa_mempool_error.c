@@ -21,7 +21,7 @@ ememoa_mempool_error2string (ememoa_mempool_error_t error_code)
       return "Realloc of memory->objects_pool failed.";
     case EMEMOA_ERROR_MALLOC_NEW_POOL:
       return "New pool allocation failed.";
-    case EMEMOA_ERROR_PUSH_ADRESS_NOT_FOUND:
+    case EMEMOA_ERROR_PUSH_ADDRESS_NOT_FOUND:
       return "Address doesn't belong to the pool.";
     case EMEMOA_NO_EMPTY_POOL:
       return "All pool still have some allocated objects. Impossible to give back any pool to the system.";
