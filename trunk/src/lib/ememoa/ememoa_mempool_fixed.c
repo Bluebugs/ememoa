@@ -259,7 +259,7 @@ ememoa_mempool_fixed_clean (int	mempool)
  */
 
 /**
- * Set the bit corresponding to the allocated adress as used.
+ * Set the bit corresponding to the allocated address as used.
  *
  * @param	index_l			Lower part of the index (inside one bitmask_t)
  * @param	index_h			Higher part of the index (index in the bitmask_t[])
@@ -268,7 +268,7 @@ ememoa_mempool_fixed_clean (int	mempool)
  * @ingroup	Ememoa_Alloc_Mempool
  */
 static void
-set_adress (unsigned int	index_l,
+set_address (unsigned int	index_l,
 	    unsigned int	index_h,
 	    bitmask_t		*objects_use_slot,
 	    unsigned int	*jump_object_slot)
@@ -366,7 +366,7 @@ ememoa_mempool_fixed_pop_object (int mempool)
 {
    struct ememoa_mempool_fixed_s        *memory = ememoa_mempool_fixed_get_index (mempool);
    struct ememoa_mempool_fixed_pool_s   *pool;
-   uint8_t				*start_adress = NULL;
+   uint8_t				*start_address = NULL;
 
    EMEMOA_CHECK_MAGIC(memory);
    EMEMOA_LOCK(memory);
@@ -406,9 +406,9 @@ ememoa_mempool_fixed_pop_object (int mempool)
 	if (--pool->available_objects == 0)
 	  memory->jump_pool++;
 
-	start_adress = pool->objects_pool + index * memory->object_size;
+	start_address = pool->objects_pool + index * memory->object_size;
 
-	set_adress (EMEMOA_INDEX_LOW(index),
+	set_address (EMEMOA_INDEX_LOW(index),
                     EMEMOA_INDEX_HIGH(index),
                     pool->objects_use,
                     &pool->jump_object);
@@ -418,8 +418,8 @@ ememoa_mempool_fixed_pop_object (int mempool)
         pool = add_pool (memory);
 	if (pool != NULL)
 	  {
-	     start_adress = pool->objects_pool;
-	     set_adress (0, 0,
+	     start_address = pool->objects_pool;
+	     set_address (0, 0,
                          pool->objects_use,
                          &pool->jump_object);
 	  }
@@ -432,7 +432,7 @@ ememoa_mempool_fixed_pop_object (int mempool)
 #endif
 
    EMEMOA_UNLOCK(memory);
-   return start_adress;
+   return start_address;
 }
 
 /**
@@ -584,7 +584,7 @@ ememoa_mempool_fixed_push_object (int	mempool,
    if (pool)
      return 0;
 
-   memory->last_error_code = EMEMOA_ERROR_PUSH_ADRESS_NOT_FOUND;
+   memory->last_error_code = EMEMOA_ERROR_PUSH_ADDRESS_NOT_FOUND;
    return -1;
 }
 
@@ -744,7 +744,7 @@ ememoa_mempool_fixed_walk_over_cb (void *ctx, int index, void *data)
 {
    struct ememoa_mempool_fixed_pool_s           *pool = data;
    struct ememoa_mempool_fixed_walk_ctx_s       *wctx = ctx;
-   uint8_t                                      *start_adress = pool->objects_pool;
+   uint8_t                                      *start_address = pool->objects_pool;
    bitmask_t                                    *objects_use = pool->objects_use;
    unsigned int                                 j, k;
 
@@ -756,10 +756,10 @@ ememoa_mempool_fixed_walk_over_cb (void *ctx, int index, void *data)
 
         for (k = 0;
              k < (1 << BITMASK_POWER);
-             ++k, value >>= 1, start_adress += wctx->memory->object_size)
+             ++k, value >>= 1, start_address += wctx->memory->object_size)
           if ((value & 1) == 0)
             {
-               wctx->error = wctx->fctl (start_adress, wctx->data);
+               wctx->error = wctx->fctl (start_address, wctx->data);
                if (wctx->error)
                  return -1;
             }
