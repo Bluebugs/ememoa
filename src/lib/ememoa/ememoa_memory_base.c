@@ -25,22 +25,21 @@
 #define EMEMOA_CHECK_MAGIC(Memory) ;
 #endif
 
-static void* (*base_malloc)(unsigned int size) = malloc;
-static void  (*base_free)(void* ptr) = free;
+void* (*ememoa_memory_base_alloc)(unsigned int size) = malloc;
+void  (*ememoa_memory_base_free)(void* ptr) = free;
+void* (*ememoa_memory_base_realloc)(void* ptr, unsigned int size) = realloc;
 
-void*
-ememoa_memory_base_alloc (unsigned int size)
-{
-   return base_malloc (size);
-}
+/**
+ * @defgroup Ememoa_Mempool_Base_64m Static buffer allocator
+ *
+ */
 
-void
-ememoa_memory_base_free (void* ptr)
-{
-   base_free (ptr);
-}
-
+/**
+ * Global context for the static buffer allocator.
+ * @ingroup Ememoa_Mempool_Base_64m
+ */
 static struct ememoa_memory_base_s     *base_64m = NULL;
+
 
 static void
 ememoa_memory_base_remove_from_list (uint16_t index)
@@ -130,25 +129,46 @@ ememoa_memory_base_merge_64m (uint16_t  one,
 static uint16_t
 ememoa_memory_base_split_64m (uint16_t index, unsigned int length)
 {
-   uint16_t     splitted = 0xFFFF;
-
    if (base_64m->chunks[index].length != length)
      {
-        uint16_t        i;
+        struct ememoa_memory_base_chunck_s      a;
+        struct ememoa_memory_base_chunck_s      b;
+        uint16_t                                i;
+        uint16_t                                splitted;
 
         while (!(base_64m->chunks[base_64m->jump].start == 0xFFFF
                  && base_64m->chunks[base_64m->jump].prev == 0xFFFF
                  && base_64m->chunks[base_64m->jump].next == 0xFFFF))
           base_64m->jump++;
 
-        splitted = base_64m->jump;
+        splitted = base_64m->jump++;
+        ememoa_memory_base_remove_from_list (index);
 
-        base_64m->chunks[splitted].length = base_64m->chunks[index].length - length;
-        base_64m->chunks[splitted].end = base_64m->chunks[index].end;
-        base_64m->chunks[splitted].start = base_64m->chunks[index].start + length;
-        base_64m->chunks[splitted].next = 0xFFFF;
-        base_64m->chunks[splitted].prev = 0xFFFF;
-        base_64m->chunks[splitted].use = 0;
+        a = base_64m->chunks[index];
+
+        b.length = a.length - length;
+        b.end = a.end;
+        b.start = a.start + length;
+        b.next = 0xFFFF;
+        b.prev = 0xFFFF;
+        b.use = 0;
+
+        a.length = length;
+        a.end = a.start + length - 1;
+        a.use = 1;
+
+        if (a.length < b.length)
+          {
+             base_64m->chunks[index] = b;
+             base_64m->chunks[splitted] = a;
+             ememoa_memory_base_insert_in_list (index);
+          }
+        else
+          {
+             base_64m->chunks[index] = a;
+             base_64m->chunks[splitted] = b;
+             ememoa_memory_base_insert_in_list (splitted);
+          }
 
         for (i = base_64m->chunks[splitted].start;
              i != base_64m->chunks[splitted].end;
@@ -156,10 +176,9 @@ ememoa_memory_base_split_64m (uint16_t index, unsigned int length)
           base_64m->pages[i] = splitted;
         base_64m->pages[i] = splitted;
 
-        base_64m->chunks[index].length = length;
-        base_64m->chunks[index].end = base_64m->chunks[index].start + length - 1;
+        return splitted;
      }
-   return splitted;
+   return 0xFFFF;
 }
 
 static void*
@@ -178,14 +197,13 @@ ememoa_memory_base_alloc_64m (unsigned int size)
    if (prev != 0xFFFF)
      {
         uint16_t        splitted = ememoa_memory_base_split_64m (prev, real);
+        uint16_t        allocated;
+        uint16_t        empty;
 
-        if (splitted != 0xFFFF)
-          ememoa_memory_base_insert_in_list (splitted);
+        allocated = base_64m->chunks[prev].use == 1 ? prev : splitted;
+        empty = base_64m->chunks[prev].use == 1 ? splitted : prev;
 
-        ememoa_memory_base_remove_from_list (prev);
-        base_64m->chunks[prev].use = 1;
-
-        return ((uint8_t*) base_64m->base) + (base_64m->chunks[prev].start << 12);
+        return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
      }
    abort();
    return NULL;
@@ -225,6 +243,58 @@ ememoa_memory_base_free_64m (void* ptr)
 
    ememoa_memory_base_insert_in_list (chunk_index);
    base_64m->chunks[chunk_index].use = 0;
+}
+
+static void*
+ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
+{
+   void*        tmp;
+   unsigned int delta = ptr - base_64m->base;
+   uint16_t     real = (size >> 12) + (size & 0xFFF ? 1 : 0);
+   uint16_t     index = delta >> 12;
+   uint16_t     chunk_index = base_64m->pages[index];
+   uint16_t     next_chunk_index;
+
+   if (ptr == NULL)
+     return ememoa_memory_base_alloc_64m(size);
+
+   assert (ptr > base_64m->base);
+
+   if (real <= base_64m->chunks[chunk_index].length)
+     return ptr;
+
+   next_chunk_index = base_64m->pages[base_64m->chunks[chunk_index].end + 1];
+
+   if (base_64m->chunks[next_chunk_index].use == 0)
+     if (real <= base_64m->chunks[next_chunk_index].length + base_64m->chunks[chunk_index].length)
+       {
+          uint16_t      splitted;
+          uint16_t      allocated;
+          uint16_t      empty;
+
+          ememoa_memory_base_remove_from_list(next_chunk_index);
+          chunk_index = ememoa_memory_base_merge_64m(chunk_index, next_chunk_index);
+          splitted = ememoa_memory_base_split_64m (chunk_index, real);
+
+          allocated = base_64m->chunks[chunk_index].use == 1 ? chunk_index : splitted;
+          empty = base_64m->chunks[chunk_index].use == 1 ? splitted : chunk_index;
+
+          if (splitted != 0xFFFF)
+            ememoa_memory_base_insert_in_list (empty);
+
+          ememoa_memory_base_remove_from_list (allocated);
+
+          return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
+       }
+
+   tmp = ememoa_memory_base_alloc_64m(size);
+   if (!tmp)
+     return NULL;
+
+   memcpy(tmp, ptr, base_64m->chunks[chunk_index].length << 12);
+   ememoa_memory_base_free_64m(ptr);
+
+   return tmp;
 }
 
 int
@@ -269,8 +339,9 @@ ememoa_memory_base_init_64m (void* buffer, unsigned int size)
 
    base_64m = new_64m;
 
-   base_malloc = ememoa_memory_base_alloc_64m;
-   base_free = ememoa_memory_base_free_64m;
+   ememoa_memory_base_alloc = ememoa_memory_base_alloc_64m;
+   ememoa_memory_base_free = ememoa_memory_base_free_64m;
+   ememoa_memory_base_realloc = ememoa_memory_base_realloc_64m;
 
    return 0;
 }
@@ -287,7 +358,7 @@ ememoa_memory_base_resize_list_new (unsigned int size)
 
    if (tmp == NULL)
      return NULL;
-   
+
    bzero (tmp, sizeof (struct ememoa_memory_base_resize_list_s));
    tmp->size = size;
 

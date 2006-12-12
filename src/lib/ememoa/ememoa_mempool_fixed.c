@@ -97,7 +97,7 @@ struct ememoa_memory_base_resize_list_s *fixed_pool_list = NULL;
  */
 
 /**
- * Search or allocate a new mempool structur.
+ * Allocate a new mempool structur.
  *
  * @return	Will return the index of the mempool or -1 if it failed.
  * @ingroup	Ememoa_Search_Mempool
@@ -114,6 +114,13 @@ new_ememoa_fixed_pool ()
    return ememoa_memory_base_resize_list_new_item (fixed_pool_list);
 }
 
+/**
+ * Search the mempool structur matching the specified index.
+ *
+ * @param       index   The memory pool index you want to retrieve.
+ * @return              Will return a pointer to the mempool if succeeded and NULL otherwise.
+ * @ingroup     Ememoa_Search_Mempool
+ */
 struct ememoa_mempool_fixed_s*
 ememoa_mempool_fixed_get_index (unsigned int index)
 {
@@ -123,6 +130,12 @@ ememoa_mempool_fixed_get_index (unsigned int index)
    return ememoa_memory_base_resize_list_get_item (fixed_pool_list, index);
 }
 
+/**
+ * Give back a mempool index. This mempool index will be given back during a later call new_ememoa_fixed_pool().
+ *
+ * @param       index   The memory pool index, you want to give back.
+ * @ingroup     Ememoa_Search_Mempool
+ */
 static void
 ememoa_mempool_fixed_back (unsigned int index)
 {
@@ -213,7 +226,7 @@ ememoa_mempool_fixed_init (unsigned int				object_size,
 }
 
 /**
- * Destroys all allocated objects of the memory pool and uninitialize them. The 
+ * Destroys all allocated objects of the memory pool and uninitialize them. The
  * memory pool is unusable after the call of this function.
  *
  * The following example code demonstrates how to ensure that
@@ -330,6 +343,26 @@ add_pool (struct ememoa_mempool_fixed_s *memory)
 }
 
 /**
+ * This callback is used to find a pool with available slot for new object. It is used during
+ * the allocation with of a new object.
+ *
+ * @param       ctx     Useless in this context.
+ * @param       index   Useless in this context.
+ * @param       data    Pointer to a pool to test.
+ * @return      Will return TRUE if some space is available, FALSE otherwise.
+ * @ingroup     Ememoa_Mempool_Fixed
+ */
+static int
+ememoa_mempool_fixed_lookup_empty_pool_cb (void *ctx, int index, void *data)
+{
+   struct ememoa_mempool_fixed_pool_s   *pool = data;
+
+   (void) index; (void) ctx;
+
+   return pool->available_objects > 0;
+}
+
+/**
  * Pops a new object out of the memory pool
  *
  * The following example code demonstrate how to ensure that a
@@ -351,16 +384,6 @@ add_pool (struct ememoa_mempool_fixed_s *memory)
  *		memory->last_error_code and ememoa_mempool_error2string to know why.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-static int
-ememoa_mempool_fixed_lookup_empty_pool_cb (void *ctx, int index, void *data)
-{
-   struct ememoa_mempool_fixed_pool_s   *pool = data;
-
-   (void) index; (void) ctx;
-
-   return pool->available_objects > 0;
-}
-
 void*
 ememoa_mempool_fixed_pop_object (int mempool)
 {
@@ -436,13 +459,13 @@ ememoa_mempool_fixed_pop_object (int mempool)
 }
 
 /**
- * Destroys all allocated object of the memory pool. The memory pool is still
- * usable after the call of this function.
+ * Callback destroying all the content of the memory pool.
  *
- * @param	mempool		Index of a valid memory pool. If the pool was already clean
- *				bad things will happen to your program.
- * @return	Will return @c 0 if successfully cleaned.
- * @ingroup	Ememoa_Mempool_Fixed
+ * @param       ctx     Useless in this context.
+ * @param       index   Useless in this context.
+ * @param       data    Pointer to the pool to be cleaned.
+ * @return      Will return @c 1 if successfull.
+ * @ingroup     Ememoa_Mempool_Fixed
  */
 static int
 ememoa_mempool_fixed_free_pool_cb (void *ctx, int index, void *data)
@@ -457,6 +480,15 @@ ememoa_mempool_fixed_free_pool_cb (void *ctx, int index, void *data)
    return 1;
 }
 
+/**
+ * Destroys all allocated object of the memory pool. The memory pool is still
+ * usable after the call of this function.
+ *
+ * @param	mempool		Index of a valid memory pool. If the pool was already clean
+ *				bad things will happen to your program.
+ * @return	Will return @c 0 if successfully cleaned.
+ * @ingroup	Ememoa_Mempool_Fixed
+ */
 int
 ememoa_mempool_fixed_free_all_objects (int mempool)
 {

@@ -31,9 +31,11 @@ struct ememoa_memory_base_resize_list_s
 };
 
 /* Direct use of this two function is most of the time a bad idea. */
-void*           ememoa_memory_base_alloc (unsigned int size);
-void            ememoa_memory_base_free (void *ptr);
-int             ememoa_memory_base_init_64m (void* buffer, unsigned int size);
+extern void*    (*ememoa_memory_base_alloc)(unsigned int size);
+extern void     (*ememoa_memory_base_free)(void *ptr);
+extern void*    (*ememoa_memory_base_realloc)(void* ptr, unsigned int size);
+
+int     ememoa_memory_base_init_64m(void* buffer, unsigned int size);
 
 struct ememoa_memory_base_resize_list_s*        ememoa_memory_base_resize_list_new (unsigned int size);
 void    ememoa_memory_base_resize_list_clean (struct ememoa_memory_base_resize_list_s*  base);
