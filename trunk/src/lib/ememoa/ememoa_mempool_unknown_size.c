@@ -361,12 +361,20 @@ ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
 
    if (old->index == -1)
      {
-        struct ememoa_mempool_alloc_item_s      *item;
+        struct ememoa_mempool_alloc_item_s              *item;
+        struct ememoa_mempool_unknown_size_item_s       *tmp;
 
         item = old->item;
 
-        if (item->size >= size)
-          return ptr;
+        tmp = ememoa_memory_base_realloc (old, size + sizeof (struct ememoa_mempool_unknown_size_item_s));
+
+        if (tmp)
+          {
+             item->size = size;
+             tmp->data = tmp + 1;
+
+             return tmp->data;
+          }
 
         copy = item->size;
      }
@@ -455,9 +463,6 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 	item->next = memory->start;
 
         /* size need to be a multiple of 4K for the allocator. */
-        size--;
-        size |= 4096;
-        size++;
         item->size = size - sizeof (struct ememoa_mempool_unknown_size_item_s);
 
 	new = ememoa_memory_base_alloc (size);
