@@ -346,6 +346,11 @@ ememoa_memory_base_init_64m (void* buffer, unsigned int size)
    return 0;
 }
 
+/**
+ * @defgroup Ememoa_Mempool_Base_Resize_List Function enabling manipulation of array with linked list properties.
+ *
+ */
+
 struct ememoa_memory_base_resize_list_s*
 ememoa_memory_base_resize_list_new (unsigned int size)
 {
@@ -372,198 +377,133 @@ ememoa_memory_base_resize_list_new (unsigned int size)
 void
 ememoa_memory_base_resize_list_clean (struct ememoa_memory_base_resize_list_s*  base)
 {
-   struct ememoa_memory_base_resize_list_item_s *start;
-   struct ememoa_memory_base_resize_list_item_s *next;
-#ifdef DEBUG
-   unsigned int                                 warned = 0;
-#endif
-
    EMEMOA_CHECK_MAGIC(base);
 
-   for (start = base->start;
-        start != NULL;
-        start = next)
-     {
-        next = start->next;
+   ememoa_memory_base_free (base->pool);
+   ememoa_memory_base_free (base->bitmap);
 
 #ifdef DEBUG
-        if (!warned && start->used != 0xFFFFFFFF)
-          fprintf(stderr, "Warning some element where not freed from this list.\n");
+   if (base->actif != 0)
+     fprintf(stderr, "Warning some element where not freed from this list.\n");
 #endif
-
-        ememoa_memory_base_free (start->pool);
-        ememoa_memory_base_free (start);
-     }
 
 #ifdef DEBUG
    base->magic = 0;
 #endif
+
    ememoa_memory_base_free (base);
 }
 
 int
 ememoa_memory_base_resize_list_new_item (struct ememoa_memory_base_resize_list_s *base)
 {
-   struct ememoa_memory_base_resize_list_item_s *start;
-   unsigned int                                 j;
+   int                  i;
 
    EMEMOA_CHECK_MAGIC(base);
 
-   for (j = 0, start = base->start;
-        start != NULL && start->used == 0;
-        start = start->next, ++j)
-     ;
-
-   if (start)
+   if (base->count < base->actif + 1)
      {
-        int     mask = 1;
-        int     index;
+        unsigned int    count;
+        uint32_t        *tmp_bitmap;
+        void            *tmp_pool;
 
-        index = ffs (start->used) - 1;
-        mask <<= index;
-        start->used &= ~mask;
-        base->delivered++;
+        count = base->count + 32;
 
-        return (base->count - j - 1) * 32 + index;
+        tmp_pool = ememoa_memory_base_realloc (base->pool, count * base->size);
+        if (!tmp_pool)
+          return -1;
+        base->pool = tmp_pool;
+
+        tmp_bitmap = ememoa_memory_base_realloc (base->bitmap, (count >> 5) * sizeof (uint32_t));
+        if (!tmp_bitmap)
+          return -1;
+        base->bitmap = tmp_bitmap;
+
+        base->bitmap[base->count >> 5] = 0xFFFFFFFF;
+
+#ifdef DEBUG
+        memset ((uint8_t*) tmp_pool + base->count * base->size, 43, base->size * 32);
+#endif
+        base->count = count;
+
      }
 
-   start = ememoa_memory_base_alloc (sizeof (struct ememoa_memory_base_resize_list_s));
-   if (start == NULL)
-     return -1;
+   for (; base->jump < (base->count >> 5) && base->bitmap[base->jump] == 0; ++base->jump)
+     ;
 
-   start->used = 0xFFFFFFFE;
-   start->next = base->start;
-   start->prev = NULL;
-   if (base->start)
-     base->start->prev = start;
-   else
-     base->end = start;
+   assert (base->jump < (base->count >> 5));
 
-   start->pool = ememoa_memory_base_alloc (base->size * 32);
-#ifdef DEBUG
-   memset (start->pool, 43, base->size * 32);
-#endif
+   i = ffs(base->bitmap[base->jump]) - 1;
 
-   assert(start->pool);
+   assert (i >= 0 && i < 32);
 
-   base->start = start;
-   base->count++;
-   base->delivered++;
+   base->bitmap[base->jump] &= ~(1 << i);
+   base->actif++;
 
-   return (base->count - 1) * 32;
+   return (base->jump << 5) + i;
 }
 
 void*
 ememoa_memory_base_resize_list_get_item (struct ememoa_memory_base_resize_list_s *base, int index)
 {
-   struct ememoa_memory_base_resize_list_item_s *start;
-   unsigned int                                 i;
-   unsigned int                                 j;
-
    EMEMOA_CHECK_MAGIC(base);
 
    if (index < 0)
      return NULL;
 
-   j = index >> 5;
-   i = index & 0x1F;
-
-   if (j > (base->count >> 1))
-     for (start = base->end;
-          j > 0 && start != NULL;
-          --j, start = start->prev)
-       ;
-   else
-     for (start = base->start, j = base->count - j - 1;
-          j > 0 && start != NULL;
-          --j, start = start->next)
-       ;
-
-   if (j == 0 && start)
-     return (void*) ((uint8_t*) start->pool + i * base->size);
-
-   return NULL;
+   return (void*) ((uint8_t*) base->pool + index * base->size);
 }
 
 void
 ememoa_memory_base_resize_list_back (struct ememoa_memory_base_resize_list_s *base, int index)
 {
-   struct ememoa_memory_base_resize_list_item_s *start;
+   unsigned int                                 shift;
    unsigned int                                 i;
-   unsigned int                                 j;
 
    EMEMOA_CHECK_MAGIC(base);
 
    if (index < 0)
      return ;
 
-   j = index >> 5;
+   shift = index >> 5;
    i = index & 0x1F;
 
-   if (j > (base->count >> 2))
-     for (start = base->end;
-          j > 0 && start != NULL;
-          --j, start = start->prev)
-       ;
-   else
-     for (start = base->start, j = base->count - j - 1;
-          j > 0 && start != NULL;
-          --j, start = start->next)
-       ;
+   base->bitmap[shift] |= (1 << i);
+   base->actif--;
 
-   if (j == 0 && start)
-     {
+   if (shift < base->jump)
+     base->jump = shift;
+
 #ifdef DEBUG
-        memset (start->pool + base->size * i, 44, base->size);
+   memset ((uint8_t*) base->pool + base->size * index, 44, base->size);
 #endif
-        start->used |= 1 << i;
-        base->delivered--;
-     }
 }
 
 int
 ememoa_memory_base_resize_list_garbage_collect (struct ememoa_memory_base_resize_list_s *base)
 {
-   struct ememoa_memory_base_resize_list_item_s *start;
-   struct ememoa_memory_base_resize_list_item_s *prev;
-   int                                          result = -1;
+   uint32_t     *tmp_bitmap;
+   void         *tmp_pool;
+   unsigned int count;
 
    EMEMOA_CHECK_MAGIC(base);
 
-   start = base->start;
+   count = base->count;
 
-   if (start)
-     for (prev = start, start = start->next;
-          start != NULL;
-          prev = start, start = start->next)
-       if (start->used == 0xFFFFFFFF)
-         {
-            prev->next = start->next;
-            if (start->next)
-              start->next->prev = prev;
-            else
-              base->end = prev;
-            ememoa_memory_base_free (start->pool);
-            ememoa_memory_base_free (start);
-            start = prev->next;
-            result = 0;
-            if (!start)
-              break;
-         }
+   for (; base->count > 0 && base->bitmap[(base->count >> 5)] == 0xFFFFFFFF; base->count -= 32)
+     ;
 
-   if (base->start)
-     if (base->start->used == 0xFFFFFFFF)
-       {
-          start = base->start;
-          base->start = start->next;
-          if (start->next == NULL)
-            base->end = NULL;
-          ememoa_memory_base_free (start->pool);
-          ememoa_memory_base_free (start);
-          result = 0;
-       }
+   tmp_pool = ememoa_memory_base_realloc (base->pool, base->count * base->size);
+   if (!tmp_pool)
+     return -1;
+   base->pool = tmp_pool;
 
-   return result;
+   tmp_bitmap = ememoa_memory_base_realloc (base->bitmap, (base->count >> 5) * sizeof (uint32_t));
+   if (!tmp_bitmap)
+     return -1;
+   base->bitmap = tmp_bitmap;
+
+   return count != base->count;
 }
 
 int
@@ -573,40 +513,43 @@ ememoa_memory_base_resize_list_walk_over (struct ememoa_memory_base_resize_list_
                                           int (*fct)(void *ctx, int index, void *data),
                                           void *ctx)
 {
-   struct ememoa_memory_base_resize_list_item_s *l;
-   unsigned int                                 mask;
-   int                                          j;
-   int                                          i;
-   int                                          result = 0;
+   int          bitmap;
+   int          first;
+   int          end_shift;
+   int          end_i;
+   int          shift;
+   int          i;
+   int          result = 0;
 
    EMEMOA_CHECK_MAGIC(base);
 
-   j = start >> 5;
    i = start & 0x1F;
 
    if (end < 0)
-     end = -1;
+     end = base->count - 1;
 
-   for (l = base->end;
-        l != NULL && j > 0;
-        l = l->prev, --j)
-     ;
+   if (end == -1)
+     return 0;
 
-   for (j = start & 0xFFFFFFE0;
-        l != NULL && j < (end & 0x7FFFFFE0);
-        j += 32, l = l->prev)
-     for (mask = ~l->used, i = ffs(mask) - 1, mask >>= i;
-          mask;
-          ++i, mask >>= 1)
-       if (mask & 1)
-         result += fct (ctx, j + i, l->pool + i * base->size);
+   end_shift = end >> 5;
+   end_i = end & 0x1F;
 
-   if (l != NULL)
-     for (mask = ~l->used & ((end & 0x1F) - 1), i = ffs(mask) - 1, mask >>= i;
-          mask;
-          ++i, mask >>= 1)
-       if (mask & 1)
-         result += fct (ctx, j + i, l->pool + i * base->size);
+   for (shift = start >> 5; shift < end_shift; ++shift)
+     {
+        bitmap = ~base->bitmap[shift];
+        first = ffs(bitmap) - 1;
+
+        i = i > first ? i : first;
+        for (bitmap >>= i; i < 32; ++i, bitmap >>= 1)
+          if (bitmap & 0x1)
+            result += fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size);
+        i = 0;
+     }
+
+   bitmap = ~base->bitmap[shift];
+   for (bitmap >>= i; i < end_i; ++i, bitmap >>= 1)
+     if (bitmap & 0x1)
+       result += fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size);
 
    return result;
 }
@@ -619,52 +562,52 @@ ememoa_memory_base_resize_list_search_over (struct ememoa_memory_base_resize_lis
                                             void *ctx,
                                             int *index)
 {
-   struct ememoa_memory_base_resize_list_item_s *l;
-   unsigned int                                 mask;
-   int                                          j;
-   int                                          i;
+   int          bitmap;
+   int          first;
+   int          end_shift;
+   int          end_i;
+   int          shift;
+   int          i;
 
    EMEMOA_CHECK_MAGIC(base);
 
-   j = start >> 5;
    i = start & 0x1F;
 
    if (end < 0)
-     end = -1;
+     end = base->count - 1;
 
-   for (l = base->end;
-        l != NULL && j > 0;
-        l = l->prev, --j)
-     ;
+   if (end == -1)
+     return NULL;
 
-   for (j = start & 0xFFFFFFE0;
-        l != NULL && j < (end & 0x7FFFFFE0);
-        j += 32, l = l->prev)
-     for (mask = ~l->used, i = ffs(mask) - 1, mask >>= i;
-          mask;
-          ++i, mask >>= 1)
-       if (mask & 1)
-         if (fct (ctx, j + i, l->pool + i * base->size))
-           {
-              if (index)
-                *index = j + i;
-              return l->pool + i * base->size;
-           }
+   end_shift = end >> 5;
+   end_i = end & 0x1F;
 
-   if (l != NULL)
-     for (mask = ~l->used & ((end & 0x1F) - 1), i = ffs(mask) - 1, mask >>= i;
-          mask;
-          ++i, mask <<= 1)
-       if (mask & 1)
-         if (fct (ctx, j + i, l->pool + i * base->size))
-           {
-              if (index)
-                *index = j + i;
-              return l->pool + i * base->size;
-           }
+   for (shift = start >> 5; shift < end_shift; ++shift)
+     {
+        bitmap = ~base->bitmap[shift];
+        first = ffs(bitmap) - 1;
+
+        i = i > first ? i : first;
+        for (bitmap >>= i; i < 32; ++i, bitmap >>= 1)
+          if (bitmap & 0x1)
+            if (fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size))
+              goto found;
+        i = 0;
+     }
+
+   bitmap = ~base->bitmap[shift];
+   for (bitmap >>= i; i < end_i; ++i, bitmap >>= 1)
+     if (bitmap & 0x1)
+       if (fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size))
+         goto found;
 
    if (index)
      *index = 0;
    return NULL;
+
+  found:
+   if (index)
+     *index = (shift << 5) + i;
+   return base->pool + ((shift << 5) + i) * base->size;
 }
 

@@ -7,27 +7,19 @@
 #ifndef         EMEMOA_MEMORY_BASE_H__
 # define        EMEMOA_MEMORY_BASE_H__
 
-struct ememoa_memory_base_resize_list_item_s
-{
-   void                                         *pool;
-   unsigned int                                 used;
-
-   struct ememoa_memory_base_resize_list_item_s *next;
-   struct ememoa_memory_base_resize_list_item_s *prev;
-};
-
 struct ememoa_memory_base_resize_list_s
 {
 #ifdef DEBUG
    unsigned int                                 magic;
 #endif
 
-   unsigned int                                 count;
-   unsigned int                                 delivered;
-   unsigned int                                 size;
+   void                                         *pool;
+   uint32_t                                     *bitmap;
 
-   struct ememoa_memory_base_resize_list_item_s *start;
-   struct ememoa_memory_base_resize_list_item_s *end;
+   unsigned int                                 jump;
+   unsigned int                                 count;
+   unsigned int                                 actif;
+   unsigned int                                 size;
 };
 
 /* Direct use of this two function is most of the time a bad idea. */
