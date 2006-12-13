@@ -7,6 +7,8 @@
 #ifndef         EMEMOA_MEMORY_BASE_H__
 # define        EMEMOA_MEMORY_BASE_H__
 
+#include <stdint.h>
+
 struct ememoa_memory_base_resize_list_s
 {
 #ifdef DEBUG
