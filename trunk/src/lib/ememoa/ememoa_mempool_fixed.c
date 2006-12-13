@@ -910,11 +910,11 @@ ememoa_mempool_fixed_display_statistic (int mempool)
 
    printf ("Objects per pool: %i[%x] (for poi: %i, pot: %i)\n", memory->max_objects, memory->max_objects, memory->max_objects_poi, memory->max_objects_pot);
    printf ("Object size: %i\n", memory->object_size);
-   printf ("Allocated pool: %i\n", memory->base->count);
+   printf ("Allocated pool: %i\n", memory->base->actif);
 
 #ifdef DEBUG
    printf ("Objects currently delivered: %i.\n", memory->out_objects);
-   printf ("Total objects currently in pool: %i.\n", memory->max_objects * memory->base->delivered);
+   printf ("Total objects currently in pool: %i.\n", memory->max_objects * memory->base->actif);
    printf ("Maximum delivered objects since the birth of the memory pool: %i.\n", memory->max_out_objects);
 #endif
 

@@ -5,7 +5,7 @@
 
 # Autconf init
 AC_PREREQ(2.59)
-AC_INIT([ememoa], [0.0.12], [cedric.bail@free.fr])
+AC_INIT([ememoa], [0.0.14], [cedric.bail@free.fr])
 
 # Auxiliary files
 AC_CONFIG_AUX_DIR([build-aux])
