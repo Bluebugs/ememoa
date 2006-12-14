@@ -540,16 +540,16 @@ ememoa_memory_base_resize_list_walk_over (struct ememoa_memory_base_resize_list_
         first = ffs(bitmap) - 1;
 
         i = i > first ? i : first;
-        for (bitmap >>= i; i < 32; ++i, bitmap >>= 1)
+        for (bitmap >>= i; i < 32; ++i, bitmap >>= 1, ++start)
           if (bitmap & 0x1)
-            result += fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size);
+            result += fct (ctx, start, base->pool + start * base->size);
         i = 0;
      }
 
    bitmap = ~base->bitmap[shift];
-   for (bitmap >>= i; i < end_i; ++i, bitmap >>= 1)
+   for (bitmap >>= i; i < end_i; ++i, bitmap >>= 1, ++start)
      if (bitmap & 0x1)
-       result += fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size);
+       result += fct (ctx, start, base->pool + start * base->size);
 
    return result;
 }
@@ -588,17 +588,17 @@ ememoa_memory_base_resize_list_search_over (struct ememoa_memory_base_resize_lis
         first = ffs(bitmap) - 1;
 
         i = i > first ? i : first;
-        for (bitmap >>= i; i < 32; ++i, bitmap >>= 1)
+        for (bitmap >>= i; i < 32; ++i, bitmap >>= 1, ++start)
           if (bitmap & 0x1)
-            if (fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size))
+            if (fct (ctx, start, base->pool + start * base->size))
               goto found;
         i = 0;
      }
 
    bitmap = ~base->bitmap[shift];
-   for (bitmap >>= i; i < end_i; ++i, bitmap >>= 1)
+   for (bitmap >>= i; i < end_i; ++i, bitmap >>= 1, ++start)
      if (bitmap & 0x1)
-       if (fct (ctx, (shift << 5) + i, base->pool + ((shift << 5) + i) * base->size))
+       if (fct (ctx, start, base->pool + start * base->size))
          goto found;
 
    if (index)
@@ -607,7 +607,7 @@ ememoa_memory_base_resize_list_search_over (struct ememoa_memory_base_resize_lis
 
   found:
    if (index)
-     *index = (shift << 5) + i;
-   return base->pool + ((shift << 5) + i) * base->size;
+     *index = start;
+   return base->pool + start * base->size;
 }
 
