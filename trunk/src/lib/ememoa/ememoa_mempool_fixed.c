@@ -511,27 +511,6 @@ ememoa_mempool_fixed_free_all_objects (int mempool)
    return 0;
 }
 
-/**
- * Push back an object in the memory pool
- *
- * The following example code demonstrates how to ensure that a
- * given pointer has been successfully given back to his memory pool.
- *
- * @code
- *   if (ememoa_mempool_fixed_push_object (mempool_of_object, new_object))
- *   {
- *	fprintf (stderr, "ERROR: %s", ememoa_mempool_error2string ( ememoa_mempool_fixed_get_last_error (mempool_of_object)));
- *	exit (-1);
- *   }
- * @endcode
- *
- * @param	mempool		Index of a valid memory pool. If the pool was already clean
- *				bad things will happen to your program.
- * @param	ptr		Pointer to object that belongs to @c memory mempool.
- * @return	Will return @c 0 if it was successfully pushed back to the memory pool. If not, check
- *		memory->last_error_code and ememoa_mempool_error2string to know why.
- * @ingroup	Ememoa_Mempool_Fixed
- */
 struct ememoa_mempool_fixed_push_ctx_s
 {
    void                                 *ptr;
@@ -539,6 +518,15 @@ struct ememoa_mempool_fixed_push_ctx_s
    struct ememoa_mempool_fixed_s        *memory;
 };
 
+/**
+ * Callback checking and pushing back in a previously allocated chunk.
+ *
+ * @param       ctx     Push context (precomputed value checked against each pool).
+ * @param       index   Useless in this context.
+ * @param       data    Pointer to the pool to check.
+ * @return      Will return @c 1 if successfull.
+ * @ingroup     Ememoa_Mempool_Fixed
+ */
 static int
 ememoa_mempool_fixed_push_object_cb (void *ctx, int index, void *data)
 {
@@ -589,6 +577,27 @@ ememoa_mempool_fixed_push_object_cb (void *ctx, int index, void *data)
    return 0;
 }
 
+/**
+ * Push back an object in the memory pool
+ *
+ * The following example code demonstrates how to ensure that a
+ * given pointer has been successfully given back to his memory pool.
+ *
+ * @code
+ *   if (ememoa_mempool_fixed_push_object (mempool_of_object, new_object))
+ *   {
+ *	fprintf (stderr, "ERROR: %s", ememoa_mempool_error2string ( ememoa_mempool_fixed_get_last_error (mempool_of_object)));
+ *	exit (-1);
+ *   }
+ * @endcode
+ *
+ * @param	mempool		Index of a valid memory pool. If the pool was already clean
+ *				bad things will happen to your program.
+ * @param	ptr		Pointer to object that belongs to @c memory mempool.
+ * @return	Will return @c 0 if it was successfully pushed back to the memory pool. If not, check
+ *		memory->last_error_code and ememoa_mempool_error2string to know why.
+ * @ingroup	Ememoa_Mempool_Fixed
+ */
 int
 ememoa_mempool_fixed_push_object (int	mempool,
                                   void	*ptr)
@@ -621,12 +630,13 @@ ememoa_mempool_fixed_push_object (int	mempool,
 }
 
 /**
- * Walks on each allocated pool and free it, if empty.
+ * Callback freeing empty pool.
  *
- * @param	memory		Pointer to a valid address of a memory pool. If
- *				an invalid pool is passed, bad things will happen.
- * @return	Will @c count the number of used pools and give the information back.
- * @ingroup	Ememoa_Alloc_Mempool
+ * @param       ctx     Pointer to the current memory pool.
+ * @param       index   Useless in this context.
+ * @param       data    Pointer to the pool to freed.
+ * @return      Will return @c 0 if freed.
+ * @ingroup     Ememoa_Alloc_Mempool
  */
 static int
 ememoa_used_pool_cb (void *ctx, int index, void *data)
@@ -650,6 +660,14 @@ ememoa_used_pool_cb (void *ctx, int index, void *data)
    return 0;
 }
 
+/**
+ * Walks on each allocated pool and free it, if empty.
+ *
+ * @param	memory		Pointer to a valid address of a memory pool. If
+ *				an invalid pool is passed, bad things will happen.
+ * @return	Will @c count the number of used pools and give the information back.
+ * @ingroup	Ememoa_Alloc_Mempool
+ */
 static int
 ememoa_mempool_fixed_garbage_collect_struct (struct ememoa_mempool_fixed_s *memory)
 {
@@ -719,6 +737,24 @@ ememoa_mempool_fixed_garbage_collect(int mempool)
 }
 
 /**
+ * Callback running garbage collector on a memory pool.
+ *
+ * @param       ctx     Useless in this context.
+ * @param       index   Useless in this context.
+ * @param       data    Pointer to a memory pool.
+ * @return      Will return @c 0 if some pool where freed.
+ * @ingroup     Ememoa_Alloc_Mempool
+ */
+static int
+ememoa_memory_base_walk_over_gc_cb (void *ctx, int index, void *data)
+{
+   struct ememoa_mempool_fixed_s        *memory = data;
+   (void) index; (void) ctx;
+
+   return ememoa_mempool_fixed_garbage_collect_struct (memory);
+}
+
+/**
  * Call the garbage collector on all allocated memory pool and reclaim memory as much
  * as possible.
  *
@@ -735,34 +771,12 @@ ememoa_mempool_fixed_garbage_collect(int mempool)
  * @return	Will return @c 0 if some pools were freed.
  * @ingroup	Ememoa_Mempool_Fixed
  */
-
-static int
-ememoa_memory_base_walk_over_gc_cb (void *ctx, int index, void *data)
-{
-   struct ememoa_mempool_fixed_s        *memory = data;
-   (void) index; (void) ctx;
-
-   return ememoa_mempool_fixed_garbage_collect_struct (memory);
-}
-
 int
 ememoa_mempool_fixed_garbage_collect_all (void)
 {
    return ememoa_memory_base_resize_list_walk_over (fixed_pool_list, 0, -1, ememoa_memory_base_walk_over_gc_cb, NULL);
 }
 
-/**
- * Executes fctl on all allocated data in the pool. If the execution of fctl returns something
- * else than 0, then the walk ends and returns the error code provided by fctl.
- *
- * @param	mempool		Index of a valid memory pool. If the pool was already clean
- *				bad things will happen to your program.
- * @param	fctl		Function pointer that must be run on all allocated
- *				objects.
- * @param	data		Pointer that will be passed as is to each call to fctl.
- * @return	Will return @c 0 if the run walked over all allocated objects.
- * @ingroup	Ememoa_Mempool_Fixed
- */
 struct ememoa_mempool_fixed_walk_ctx_s
 {
    struct ememoa_mempool_fixed_s        *memory;
@@ -771,6 +785,15 @@ struct ememoa_mempool_fixed_walk_ctx_s
    int                                  error;
 };
 
+/**
+ * Callback running fctl over all allocated data in a pool.
+ *
+ * @param       ctx     Pointer to usefull context data.
+ * @param       index   Useless in this context.
+ * @param       data    Pointer to a memory pool.
+ * @return      Will return @c 0 if every thing run correctly.
+ * @ingroup     Ememoa_Mempool_Fixed
+ */
 static int
 ememoa_mempool_fixed_walk_over_cb (void *ctx, int index, void *data)
 {
@@ -799,6 +822,18 @@ ememoa_mempool_fixed_walk_over_cb (void *ctx, int index, void *data)
    return 0;
 }
 
+/**
+ * Executes fctl on all allocated data in the pool. If the execution of fctl returns something
+ * else than 0, then the walk ends and returns the error code provided by fctl.
+ *
+ * @param	mempool		Index of a valid memory pool. If the pool was already clean
+ *				bad things will happen to your program.
+ * @param	fctl		Function pointer that must be run on all allocated
+ *				objects.
+ * @param	data		Pointer that will be passed as is to each call to fctl.
+ * @return	Will return @c 0 if the run walked over all allocated objects.
+ * @ingroup	Ememoa_Mempool_Fixed
+ */
 int
 ememoa_mempool_fixed_walk_over (int		mempool,
 				ememoa_fctl	fctl,
@@ -941,11 +976,14 @@ ememoa_mempool_fixed_display_statistic (int mempool)
 }
 
 /**
- * Displays all the statistic currently known about all active Mempool.
+ * Callback used to count active pool.
+ * FIXME: It must exist a better way to do it.
  *
- * @param	mempool		Index of a valid memory pool. If the pool was already clean
- *				bad things will happen to your program.
- * @ingroup	Ememoa_Display_Mempool
+ * @param       ctx     Useless in this context.
+ * @param       index   Useless in this context.
+ * @param       data    Useless in this context.
+ * @return      Will return @c 1 if every thing run correctly.
+ * @ingroup     Ememoa_Display_Mempool
  */
 static int
 ememoa_mempool_fixed_display_statistic_count_cb (void* ctx, int index, void *data)
@@ -955,6 +993,15 @@ ememoa_mempool_fixed_display_statistic_count_cb (void* ctx, int index, void *dat
    return 1;
 }
 
+/**
+ * Callback for displaying statistic of a memory pool.
+ *
+ * @param       ctx     Useless in this context.
+ * @param       index   Memory pool index.
+ * @param       data    Useless in this context.
+ * @return      Will return @c 0 if every thing run correctly.
+ * @ingroup     Ememoa_Display_Mempool
+ */
 static int
 ememoa_mempool_fixed_display_statistic_cb (void* ctx, int index, void *data)
 {
@@ -964,6 +1011,13 @@ ememoa_mempool_fixed_display_statistic_cb (void* ctx, int index, void *data)
    return 0;
 }
 
+/**
+ * Displays all the statistic currently known about all active Mempool.
+ *
+ * @param	mempool		Index of a valid memory pool. If the pool was already clean
+ *				bad things will happen to your program.
+ * @ingroup	Ememoa_Display_Mempool
+ */
 void
 ememoa_mempool_fixed_display_statistic_all (void)
 {
