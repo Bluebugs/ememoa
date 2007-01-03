@@ -30,7 +30,7 @@ void  (*ememoa_memory_base_free)(void* ptr) = free;
 void* (*ememoa_memory_base_realloc)(void* ptr, unsigned int size) = realloc;
 
 /**
- * @defgroup Ememoa_Mempool_Base_64m Static buffer allocator
+ * @defgroup Ememoa_Mempool_Base_64m Static buffer allocator.
  *
  */
 
@@ -40,7 +40,13 @@ void* (*ememoa_memory_base_realloc)(void* ptr, unsigned int size) = realloc;
  */
 static struct ememoa_memory_base_s     *base_64m = NULL;
 
-
+/**
+ * Remove an item from the base_64m free block list.
+ *
+ * @param       index   Item to be removed.
+ * @return	Will never fail.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 static void
 ememoa_memory_base_remove_from_list (uint16_t index)
 {
@@ -60,6 +66,13 @@ ememoa_memory_base_remove_from_list (uint16_t index)
    base_64m->chunks[index].next = 0xFFFF;
 }
 
+/**
+ * Insert an item in the base_64m free block list.
+ *
+ * @param       index   Item to be inserted.
+ * @return	Will break completely if the item is already in the list.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 static void
 ememoa_memory_base_insert_in_list (uint16_t index)
 {
@@ -90,12 +103,22 @@ ememoa_memory_base_insert_in_list (uint16_t index)
      base_64m->start = index;
 }
 
+/**
+ * Merge two chunk of memory together. Choose the index of the resulting
+ * chunk as the one requiring less effort for committing the change. No
+ * requirement on parameters order or any other characteristic exist.
+ *
+ * @param       one     First part of the chunk to be merged.
+ * @param       two     Second part of the chunk to be merged.
+ * @return	Index of the new chunk.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 static uint16_t
 ememoa_memory_base_merge_64m (uint16_t  one,
                               uint16_t  two)
 {
-   uint16_t     tmp;
    uint16_t     index;
+   uint16_t     tmp;
 
    if (base_64m->chunks[one].length < base_64m->chunks[two].length)
      {
@@ -126,6 +149,17 @@ ememoa_memory_base_merge_64m (uint16_t  one,
    return one;
 }
 
+/**
+ * Split a chunk in two, allocating a new one on the fly and doing as few as possible
+ * memory update. The new allocated chunk could be used as the left or right part of
+ * the splitted chunk depending on the fastest strategie. You will need to guess by your
+ * self what was our choice.
+ *
+ * @param       index   The item to split.
+ * @param       length  The required size for one of the two resulting chunk.
+ * @return	0xFFFF, if the chunk already has the right size otherwise the new allocated chunk.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 static uint16_t
 ememoa_memory_base_split_64m (uint16_t index, unsigned int length)
 {
@@ -181,6 +215,13 @@ ememoa_memory_base_split_64m (uint16_t index, unsigned int length)
    return 0xFFFF;
 }
 
+/**
+ * Just allocate like malloc a new memory chunk from the static buffer.
+ *
+ * @param       size    The asked size.
+ * @return	NULL if not enough memory, or a correct pointer otherwise.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 static void*
 ememoa_memory_base_alloc_64m (unsigned int size)
 {
@@ -200,15 +241,22 @@ ememoa_memory_base_alloc_64m (unsigned int size)
         uint16_t        allocated;
         uint16_t        empty;
 
+        /* Guess who is who */
         allocated = base_64m->chunks[prev].use == 1 ? prev : splitted;
         empty = base_64m->chunks[prev].use == 1 ? splitted : prev;
 
         return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
      }
-   abort();
+
    return NULL;
 }
 
+/**
+ * Just free like free a previously allocated by ememoa_memory_base_alloc_64m memory chunk.
+ *
+ * @param       ptr     Pointer to be freed.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 static void
 ememoa_memory_base_free_64m (void* ptr)
 {
@@ -245,6 +293,14 @@ ememoa_memory_base_free_64m (void* ptr)
    base_64m->chunks[chunk_index].use = 0;
 }
 
+/**
+ * Just resize a memory chunk like realloc. Will not resize block to a smaller size.
+ *
+ * @param       ptr     Pointer to the current pointer allocated by ememoa_memory_base_alloc_64m.
+ * @param       size    The new asked size.
+ * @return	NULL if not enough memory, or a correct pointer otherwise.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 static void*
 ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
 {
@@ -260,6 +316,7 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
 
    assert (ptr > base_64m->base);
 
+   /* FIXME: Not resizing when the size is big enough */
    if (real <= base_64m->chunks[chunk_index].length)
      return ptr;
 
@@ -297,6 +354,15 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
    return tmp;
 }
 
+/**
+ * Switch all malloc/realloc/free operation of ememoa to static buffer allocation. You must call
+ * this function before using any other ememoa operation.
+ *
+ * @param       buffer  The static buffer from which pointer will be given.
+ * @param       size    The new asked size.
+ * @return	NULL if not enough memory, or a correct pointer otherwise.
+ * @ingroup	Ememoa_Mempool_Base_64m
+ */
 int
 ememoa_memory_base_init_64m (void* buffer, unsigned int size)
 {
@@ -351,6 +417,14 @@ ememoa_memory_base_init_64m (void* buffer, unsigned int size)
  *
  */
 
+/**
+ * Allocate a new resizable list (it's an array now). It currently use to much memory
+ * when using the base_64m allocator, it could be fixed if really usefull (Not high priority at this time).
+ *
+ * @param       size    items size inside the list.
+ * @return	Will return a pointer to the base array.
+ * @ingroup	Ememoa_Mempool_Base_Resize_List
+ */
 struct ememoa_memory_base_resize_list_s*
 ememoa_memory_base_resize_list_new (unsigned int size)
 {
@@ -374,6 +448,12 @@ ememoa_memory_base_resize_list_new (unsigned int size)
    return tmp;
 }
 
+/**
+ * Clean a list and all it's item.
+ *
+ * @param       base    List
+ * @ingroup	Ememoa_Mempool_Base_Resize_List
+ */
 void
 ememoa_memory_base_resize_list_clean (struct ememoa_memory_base_resize_list_s*  base)
 {
@@ -394,6 +474,13 @@ ememoa_memory_base_resize_list_clean (struct ememoa_memory_base_resize_list_s*  
    ememoa_memory_base_free (base);
 }
 
+/**
+ * Allocate a new item in the list "base".
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @return	Will return the new item index.
+ * @ingroup	Ememoa_Mempool_Base_Resize_List
+ */
 int
 ememoa_memory_base_resize_list_new_item (struct ememoa_memory_base_resize_list_s *base)
 {
@@ -443,6 +530,14 @@ ememoa_memory_base_resize_list_new_item (struct ememoa_memory_base_resize_list_s
    return (base->jump << 5) + i;
 }
 
+/**
+ * Give the pointer corresponding to an item index.
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @param       index   Item index given by ememoa_memory_base_resize_list_new_item.
+ * @return	Will return a pointer to the item.
+ * @ingroup	Ememoa_Mempool_Base_Resize_List
+ */
 void*
 ememoa_memory_base_resize_list_get_item (struct ememoa_memory_base_resize_list_s *base, int index)
 {
@@ -454,11 +549,18 @@ ememoa_memory_base_resize_list_get_item (struct ememoa_memory_base_resize_list_s
    return (void*) ((uint8_t*) base->pool + index * base->size);
 }
 
+/**
+ * Give back an item to the list.
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @param       index   Item index given by ememoa_memory_base_resize_list_new_item.
+ * @ingroup	Ememoa_Mempool_Base_Resize_List
+ */
 void
 ememoa_memory_base_resize_list_back (struct ememoa_memory_base_resize_list_s *base, int index)
 {
-   unsigned int                                 shift;
-   unsigned int                                 i;
+   unsigned int                 shift;
+   unsigned int                 i;
 
    EMEMOA_CHECK_MAGIC(base);
 
@@ -479,6 +581,14 @@ ememoa_memory_base_resize_list_back (struct ememoa_memory_base_resize_list_s *ba
 #endif
 }
 
+/**
+ * Make some attempt to resize the size of the list.
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @return      Will 0 is nothing where freed, -1 if not enought memory
+ *              is available for the operation and anything else if successfull.
+ * @ingroup     Ememoa_Mempool_Base_Resize_List
+ */
 int
 ememoa_memory_base_resize_list_garbage_collect (struct ememoa_memory_base_resize_list_s *base)
 {
@@ -506,6 +616,18 @@ ememoa_memory_base_resize_list_garbage_collect (struct ememoa_memory_base_resize
    return count != base->count;
 }
 
+/**
+ * Call fct on all allocated item of the list and return the sum of fct result.
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @param       start   Index to start at.
+ * @param       end     Index to end the walk.
+ * @param       fct     The callback function.
+ * @param       ctx     An obscure pointer that will be directly passed, without any
+ *                      check/change to each fct call.
+ * @return      Will return the sum of fct result.
+ * @ingroup     Ememoa_Mempool_Base_Resize_List
+ */
 int
 ememoa_memory_base_resize_list_walk_over (struct ememoa_memory_base_resize_list_s *base,
                                           int start,
@@ -554,6 +676,19 @@ ememoa_memory_base_resize_list_walk_over (struct ememoa_memory_base_resize_list_
    return result;
 }
 
+/**
+ * Call fct as long as fct doesn't return a value different from 0.
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @param       start   Index to start at.
+ * @param       end     Index to end the walk.
+ * @param       fct     The callback function.
+ * @param       ctx     An obscure pointer that will be directly passed, without any
+ *                      check/change to each fct call.
+ * @param       index   If different from NULL, put the index on which we stop in it.
+ * @return      Will return a pointer to the item where we stop the search.
+ * @ingroup     Ememoa_Mempool_Base_Resize_List
+ */
 void*
 ememoa_memory_base_resize_list_search_over (struct ememoa_memory_base_resize_list_s *base,
                                             int start,

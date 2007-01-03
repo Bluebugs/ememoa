@@ -766,8 +766,6 @@ ememoa_memory_base_walk_over_gc_cb (void *ctx, int index, void *data)
  *   }
  * @endcode
  *
- * @param	mempool		Index of a valid memory pool. If the pool was already clean
- *				bad things will happen to your program.
  * @return	Will return @c 0 if some pools were freed.
  * @ingroup	Ememoa_Mempool_Fixed
  */
@@ -1014,8 +1012,6 @@ ememoa_mempool_fixed_display_statistic_cb (void* ctx, int index, void *data)
 /**
  * Displays all the statistic currently known about all active Mempool.
  *
- * @param	mempool		Index of a valid memory pool. If the pool was already clean
- *				bad things will happen to your program.
  * @ingroup	Ememoa_Display_Mempool
  */
 void
