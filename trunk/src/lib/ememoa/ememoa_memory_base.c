@@ -327,17 +327,12 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
        {
           uint16_t      splitted;
           uint16_t      allocated;
-          uint16_t      empty;
 
           ememoa_memory_base_remove_from_list(next_chunk_index);
           chunk_index = ememoa_memory_base_merge_64m(chunk_index, next_chunk_index);
           splitted = ememoa_memory_base_split_64m (chunk_index, real);
 
           allocated = base_64m->chunks[chunk_index].use == 1 ? chunk_index : splitted;
-          empty = base_64m->chunks[chunk_index].use == 1 ? splitted : chunk_index;
-
-          if (splitted != 0xFFFF)
-            ememoa_memory_base_insert_in_list (empty);
 
           ememoa_memory_base_remove_from_list (allocated);
 
