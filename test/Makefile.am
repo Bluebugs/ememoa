@@ -15,7 +15,9 @@ TESTS 	=					\
 	test12					\
 	test13					\
 	test14					\
-	test15
+	test15					\
+	test16					\
+	test17
 
 check_PROGRAMS = $(TESTS)
 INCLUDES = -I$(top_srcdir)/include
