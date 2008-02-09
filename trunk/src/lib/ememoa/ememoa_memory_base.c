@@ -452,6 +452,9 @@ ememoa_memory_base_resize_list_new (unsigned int size)
 void
 ememoa_memory_base_resize_list_clean (struct ememoa_memory_base_resize_list_s*  base)
 {
+   if (!base)
+     return ;
+
    EMEMOA_CHECK_MAGIC(base);
 
    ememoa_memory_base_free (base->pool);
