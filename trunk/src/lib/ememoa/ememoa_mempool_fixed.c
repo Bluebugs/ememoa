@@ -553,6 +553,7 @@ ememoa_mempool_fixed_push_object_cb (void *ctx, int index, void *data)
 
 #ifdef DEBUG
         pctx->memory->out_objects--;
+#endif
         if (objects_use[index_h] & mask)
           {
              pctx->memory->last_error_code = EMEMOA_DOUBLE_PUSH;
@@ -560,7 +561,6 @@ ememoa_mempool_fixed_push_object_cb (void *ctx, int index, void *data)
              EMEMOA_UNLOCK(pctx->memory);
              return 1;
           }
-#endif
 
         objects_use[index_h] |= mask;
         pool->available_objects++;

@@ -153,6 +153,16 @@ ememoa_mempool_unknown_size_init (unsigned int				map_items_count,
    memory->pools_match = ememoa_memory_base_alloc (sizeof (unsigned int) * map_items_count);
    memory->pools = ememoa_memory_base_alloc (sizeof (unsigned int) * map_items_count);
 
+   if (memory->pools_match == NULL
+       || memory->pools == NULL)
+     {
+        ememoa_memory_base_free(memory->pools_match);
+        ememoa_memory_base_free(memory->pools);
+        ememoa_mempool_unknown_size_back(index);
+
+        return -1;
+     }
+
    for (i = 0; i < map_items_count; ++i)
      {
 	memory->pools_match[i] = map_size_count[(i << 1) + 0];
@@ -160,12 +170,36 @@ ememoa_mempool_unknown_size_init (unsigned int				map_items_count,
 						      map_size_count[(i << 1) + 1],
 						      options,
 						      NULL);
+
+        if (memory->pools[i] < 0)
+          {
+             for (--i; i > 0; --i)
+               ememoa_mempool_fixed_clean (memory->pools[i]);
+             ememoa_memory_base_free(memory->pools_match);
+             ememoa_memory_base_free(memory->pools);
+             ememoa_mempool_unknown_size_back(index);
+
+             return -1;
+          }
      }
 
    memory->allocated_list = ememoa_mempool_fixed_init (sizeof (struct ememoa_mempool_alloc_item_s),
 						       7,
 						       options,
 						       NULL);
+
+   if (memory->allocated_list < 0)
+     {
+        for (--i; i > 0; --i)
+          ememoa_mempool_fixed_clean (memory->pools[i]);
+        ememoa_mempool_fixed_clean(memory->allocated_list);
+
+        ememoa_memory_base_free(memory->pools_match);
+        ememoa_memory_base_free(memory->pools);
+        ememoa_mempool_unknown_size_back(index);
+
+        return -1;
+     }
 
    memory->start = NULL;
    memory->desc = desc;
@@ -221,6 +255,7 @@ ememoa_mempool_unknown_size_clean (unsigned int		mempool)
    pthread_mutex_destroy (&(memory->lock));
 #endif
 
+   ememoa_mempool_fixed_clean(memory->allocated_list);
    ememoa_memory_base_free (memory->pools_match);
    ememoa_memory_base_free (memory->pools);
 
@@ -387,6 +422,9 @@ ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
      }
 
    new = ememoa_mempool_unknown_size_pop_object (mempool, size);
+   if (!new)
+     return NULL;
+
    memcpy (new, ptr, copy);
    ememoa_mempool_unknown_size_push_object (mempool, ptr);
 
@@ -457,6 +495,13 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 	     return NULL;
 	  }
 
+	new = ememoa_memory_base_alloc (size);
+        if (!new)
+          {
+             ememoa_mempool_fixed_push_object(memory->allocated_list, item);
+             return NULL;
+          }
+
 	EMEMOA_LOCK(memory);
 
 	item->prev = NULL;
@@ -464,11 +509,9 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 
         /* size need to be a multiple of 4K for the allocator. */
         item->size = size - sizeof (struct ememoa_mempool_unknown_size_item_s);
-
-	new = ememoa_memory_base_alloc (size);
-	new->index = -1;
-
 	item->data = new;
+
+	new->index = -1;
 	new->item = item;
 
 	if (memory->start)
