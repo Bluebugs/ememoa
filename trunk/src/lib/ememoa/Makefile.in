@@ -57,7 +57,7 @@ am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
 am__installdirs = "$(DESTDIR)$(libdir)"
 libLTLIBRARIES_INSTALL = $(INSTALL)
 LTLIBRARIES = $(lib_LTLIBRARIES)
-libememoa_la_LIBADD =
+libememoa_la_DEPENDENCIES =
 am_libememoa_la_OBJECTS = libememoa_la-ememoa_mempool_error.lo \
 	libememoa_la-ememoa_mempool_fixed.lo \
 	libememoa_la-ememoa_mempool_unknown_size.lo \
@@ -91,6 +91,8 @@ AWK = @AWK@
 CC = $(PTHREAD_CC)
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
+COVERAGE_CFLAGS = @COVERAGE_CFLAGS@
+COVERAGE_LIBS = @COVERAGE_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
@@ -106,6 +108,8 @@ ECHO_C = @ECHO_C@
 ECHO_N = @ECHO_N@
 ECHO_T = @ECHO_T@
 EGREP = @EGREP@
+ENABLE_COVERAGE_FALSE = @ENABLE_COVERAGE_FALSE@
+ENABLE_COVERAGE_TRUE = @ENABLE_COVERAGE_TRUE@
 EXEEXT = @EXEEXT@
 F77 = @F77@
 FFLAGS = @FFLAGS@
@@ -133,6 +137,7 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 RANLIB = @RANLIB@
+SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -161,6 +166,7 @@ datarootdir = @datarootdir@
 docdir = @docdir@
 dvidir = @dvidir@
 exec_prefix = @exec_prefix@
+have_lcov = @have_lcov@
 host = @host@
 host_alias = @host_alias@
 host_cpu = @host_cpu@
@@ -193,7 +199,8 @@ libememoa_la_SOURCES = \
 	ememoa_memory_base.c			\
 	mempool_struct.h
 
-libememoa_la_CFLAGS = $(PTHREAD_CFLAGS)
+libememoa_la_CFLAGS = $(PTHREAD_CFLAGS) @COVERAGE_CFLAGS@
+libememoa_la_LIBADD = @COVERAGE_LIBS@
 libememoa_la_LDFLAGS = $(PTHREAD_CFLAGS) $(PTHREAD_LIBS) -version-info 0:16:0
 INCLUDES = -I$(top_srcdir)/include
 MAINTAINERCLEANFILES = Makefile.in
