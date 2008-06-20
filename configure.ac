@@ -5,7 +5,7 @@
 
 # Autconf init
 AC_PREREQ(2.59)
-AC_INIT([ememoa], [0.0.17], [cedric.bail@free.fr])
+AC_INIT([ememoa], [0.0.20], [cedric.bail@free.fr])
 
 # Auxiliary files
 AC_CONFIG_AUX_DIR([build-aux])
@@ -30,6 +30,42 @@ AC_ARG_ENABLE([debug],
         [echo "compiling in debug mode... -DDEBUG -ggdb3 -W -Wall";
 	 CFLAGS="-DDEBUG -ggdb3 -W -Wall"
         ])
+
+dnl Coverage
+AC_ARG_ENABLE(coverage,
+  [AC_HELP_STRING([--enable-coverage],
+    [compile with coverage profiling instrumentation @<:@default=no@:>@])],
+  [
+   if test "x${enableval}" = "xyes" ; then
+     enable_coverage="yes"
+   else
+     enable_coverage="no"
+   fi],
+  [enable_coverage="no"]
+)
+AC_MSG_CHECKING([whether to use profiling instrumentation])
+AC_MSG_RESULT($enable_coverage)
+
+if test "x$enable_coverage" = "xyes"; then
+  AC_CHECK_PROG(have_lcov,
+    [lcov],
+    [yes],
+    [no]
+  )
+  if test "x$have_lcov" = "xyes" ; then
+    COVERAGE_CFLAGS="-fprofile-arcs -ftest-coverage"
+    COVERAGE_LIBS="-lgcov"
+dnl remove any optimisation flag and force debug symbols
+    CFLAGS="-g -O0"
+  else
+    AC_MSG_WARN([lcov is not found, disable profiling instrumentation])
+    enable_coverage="no"
+  fi
+fi
+AC_SUBST(COVERAGE_CFLAGS)
+AC_SUBST(COVERAGE_LIBS)
+
+AM_CONDITIONAL(ENABLE_COVERAGE, test "x$enable_coverage" = "xyes")
 
 # Check for standard programs.
 AC_PROG_CC
