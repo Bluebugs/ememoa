@@ -66,6 +66,8 @@ struct ememoa_mempool_unknown_size_item_s
 
 struct ememoa_memory_base_resize_list_s         *unknown_size_pool_list = NULL;
 
+static int					 collected = 0;
+
 static unsigned int
 new_ememoa_unknown_pool ()
 {
@@ -346,6 +348,8 @@ ememoa_mempool_unknown_size_push_object (unsigned int	mempool,
    EMEMOA_CHECK_MAGIC(memory);
    EMEMOA_CHECK_MAGIC(old);
 
+   collected = 1;
+
    if (old->index == -1)
      {
 	struct ememoa_mempool_alloc_item_s	*item;
@@ -477,7 +481,10 @@ ememoa_mempool_unknown_size_pop_object (unsigned int	mempool,
 	  if (new == NULL)
 	    {
 	       memory->last_error_code = ememoa_mempool_fixed_get_last_error (memory->pools[i]);
-	       return NULL;
+	       /* Their is some hope we can garbage some data before we test next pool,
+		  so please do this before calling me again. */
+	       if (collected) return NULL;
+	       continue;
 	    }
 
 	  new->index = i;
@@ -558,6 +565,8 @@ ememoa_mempool_unknown_size_garbage_collect (unsigned int mempool)
      count += ememoa_mempool_fixed_garbage_collect (memory->pools[i]);
 
    count += ememoa_mempool_fixed_garbage_collect (memory->allocated_list);
+
+   collected = 0;
 
    return count;
 }
