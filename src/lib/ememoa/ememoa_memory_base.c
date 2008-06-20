@@ -261,8 +261,8 @@ static void
 ememoa_memory_base_free_64m (void* ptr)
 {
    unsigned int delta = ptr - base_64m->base;
-   uint16_t     index = delta >> 12;
-   uint16_t     chunk_index = base_64m->pages[index];
+   uint16_t     index;
+   uint16_t     chunk_index;
    uint16_t     prev_chunk_index;
    uint16_t     next_chunk_index;
 
@@ -270,6 +270,9 @@ ememoa_memory_base_free_64m (void* ptr)
      return ;
 
    assert (ptr > base_64m->base);
+
+   index = delta >> 12;
+   chunk_index = base_64m->pages[index];
 
    prev_chunk_index = base_64m->pages[index - 1];
    next_chunk_index = base_64m->pages[base_64m->chunks[chunk_index].end + 1];
@@ -307,14 +310,17 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
    void*        tmp;
    unsigned int delta = ptr - base_64m->base;
    uint16_t     real = (size >> 12) + (size & 0xFFF ? 1 : 0);
-   uint16_t     index = delta >> 12;
-   uint16_t     chunk_index = base_64m->pages[index];
+   uint16_t     index;
+   uint16_t     chunk_index;
    uint16_t     next_chunk_index;
 
    if (ptr == NULL)
      return ememoa_memory_base_alloc_64m(size);
 
    assert (ptr > base_64m->base);
+
+   index = delta >> 12;
+   chunk_index = base_64m->pages[index];
 
    /* FIXME: Not resizing when the size is big enough */
    if (real <= base_64m->chunks[chunk_index].length)
@@ -416,7 +422,7 @@ ememoa_memory_base_init_64m (void* buffer, unsigned int size)
  * Allocate a new resizable list (it's an array now). It currently use to much memory
  * when using the base_64m allocator, it could be fixed if really usefull (Not high priority at this time).
  *
- * @param       size    items size inside the list.
+5B * @param       size    items size inside the list.
  * @return	Will return a pointer to the base array.
  * @ingroup	Ememoa_Mempool_Base_Resize_List
  */
@@ -483,6 +489,9 @@ int
 ememoa_memory_base_resize_list_new_item (struct ememoa_memory_base_resize_list_s *base)
 {
    int                  i;
+
+   if (base == NULL)
+     return -1;
 
    EMEMOA_CHECK_MAGIC(base);
 
