@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include "config.h"
 
 #include "mempool_struct.h"
 
@@ -248,6 +249,9 @@ ememoa_memory_base_alloc_64m (unsigned int size)
         empty = base_64m->chunks[prev].use == 1 ? splitted : prev;
 
 	total += real;
+#ifdef ALLOC_REPORT
+	fprintf(stderr, "alloc %i(%i) [%i] => %p\n", real << 12, size, total << 12, ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12));
+#endif
         return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
      }
 
@@ -278,6 +282,9 @@ ememoa_memory_base_free_64m (void* ptr)
    chunk_index = base_64m->pages[index];
 
    total -= base_64m->chunks[chunk_index].length;
+#ifdef ALLOC_REPORT
+   fprintf(stderr, "free %i [%i] => %p\n", base_64m->chunks[chunk_index].length, total << 12, ptr);
+#endif
 
    prev_chunk_index = base_64m->pages[index - 1];
    next_chunk_index = base_64m->pages[base_64m->chunks[chunk_index].end + 1];
@@ -338,8 +345,10 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
        {
           uint16_t      splitted;
           uint16_t      allocated;
+	  int           tmp;
 
 	  total -= base_64m->chunks[chunk_index].length;
+	  tmp = base_64m->chunks[chunk_index].length;
 
 	  ememoa_memory_base_remove_from_list(next_chunk_index);
           chunk_index = ememoa_memory_base_merge_64m(chunk_index, next_chunk_index);
@@ -350,6 +359,9 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
           ememoa_memory_base_remove_from_list (allocated);
 
 	  total += real;
+#ifdef ALLOC_REPORT
+	  fprintf(stderr, "realloc %i(%i) [%i] => %p\n", (real - tmp) << 12, size, total << 12, ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12));
+#endif
 
           return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
        }

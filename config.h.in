@@ -1,5 +1,8 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
+/* Report all call to malloc/free/realloc 64m version */
+#undef ALLOC_REPORT
+
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
 
@@ -57,6 +60,9 @@
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
+
+/* Use 64 bits support as often as possible */
+#undef USE64
 
 /* Version number of package */
 #undef VERSION
