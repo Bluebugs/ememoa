@@ -93,6 +93,36 @@ if test x$use_pthread = xyes; then
    ACX_PTHREAD
 fi
 
+# More thing in one register :-)
+want_use64="no"
+AC_MSG_CHECKING([whether to use 64bits often])
+AC_ARG_ENABLE([use64],
+	AS_HELP_STRING([--enable-use64], [use 64Bits as often as possible]),
+	[want_use64=$enableval]
+)
+AC_MSG_RESULT($want_use64)
+
+AM_CONDITIONAL(USE64, test "x$want_use64" = "xyes")
+
+if test "x$want_use64" = "xyes"; then
+   AC_DEFINE(USE64, 1, [Use 64 bits support as often as possible])
+fi
+
+# Display basic alloc request.
+want_basic_alloc_report="no"
+AC_MSG_CHECKING([whether to display all call to basic 64m alloc])
+AC_ARG_ENABLE([alloc-report],
+	AS_HELP_STRING([--enable-alloc-report], [Report all call to malloc/free/realloc 64m version]),
+	[want_basic_alloc_report=$enableval]
+)
+AC_MSG_RESULT($want_basic_alloc_report)
+
+AM_CONDITIONAL(ALLOC_REPORT, test "x$want_basic_alloc_report" = "x$yes")
+
+if test "x$want_basic_alloc_report" = "xyes"; then
+   AC_DEFINE(ALLOC_REPORT, 1, [Report all call to malloc/free/realloc 64m version])
+fi
+
 # Configure files.
 AC_CONFIG_FILES([
   include/Makefile
