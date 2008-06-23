@@ -25,6 +25,8 @@
 #define EMEMOA_CHECK_MAGIC(Memory) ;
 #endif
 
+static int total = 0;
+
 void* (*ememoa_memory_base_alloc)(unsigned int size) = malloc;
 void  (*ememoa_memory_base_free)(void* ptr) = free;
 void* (*ememoa_memory_base_realloc)(void* ptr, unsigned int size) = realloc;
@@ -245,6 +247,7 @@ ememoa_memory_base_alloc_64m (unsigned int size)
         allocated = base_64m->chunks[prev].use == 1 ? prev : splitted;
         empty = base_64m->chunks[prev].use == 1 ? splitted : prev;
 
+	total += real;
         return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
      }
 
@@ -273,6 +276,8 @@ ememoa_memory_base_free_64m (void* ptr)
 
    index = delta >> 12;
    chunk_index = base_64m->pages[index];
+
+   total -= base_64m->chunks[chunk_index].length;
 
    prev_chunk_index = base_64m->pages[index - 1];
    next_chunk_index = base_64m->pages[base_64m->chunks[chunk_index].end + 1];
@@ -334,13 +339,17 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
           uint16_t      splitted;
           uint16_t      allocated;
 
-          ememoa_memory_base_remove_from_list(next_chunk_index);
+	  total -= base_64m->chunks[chunk_index].length;
+
+	  ememoa_memory_base_remove_from_list(next_chunk_index);
           chunk_index = ememoa_memory_base_merge_64m(chunk_index, next_chunk_index);
           splitted = ememoa_memory_base_split_64m (chunk_index, real);
 
           allocated = base_64m->chunks[chunk_index].use == 1 ? chunk_index : splitted;
 
           ememoa_memory_base_remove_from_list (allocated);
+
+	  total += real;
 
           return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
        }
@@ -417,12 +426,27 @@ ememoa_memory_base_init_64m (void* buffer, unsigned int size)
  * @defgroup Ememoa_Mempool_Base_Resize_List Function enabling manipulation of array with linked list properties.
  *
  */
+#define RESIZE_POOL_SIZE 128
+struct ememoa_memory_base_resize_list_pool_s
+{
+   struct ememoa_memory_base_resize_list_pool_s *next;
+
+   unsigned int					 count;
+#ifdef USE64
+   uint64_t					 map[2];
+#else
+   uint32_t					 map[4];
+#endif
+   struct ememoa_memory_base_resize_list_s	 array[RESIZE_POOL_SIZE];
+};
+
+static struct ememoa_memory_base_resize_list_pool_s *resize_pool = NULL;
 
 /**
  * Allocate a new resizable list (it's an array now). It currently use to much memory
  * when using the base_64m allocator, it could be fixed if really usefull (Not high priority at this time).
  *
-5B * @param       size    items size inside the list.
+ * @param       size    items size inside the list.
  * @return	Will return a pointer to the base array.
  * @ingroup	Ememoa_Mempool_Base_Resize_List
  */
@@ -430,14 +454,60 @@ struct ememoa_memory_base_resize_list_s*
 ememoa_memory_base_resize_list_new (unsigned int size)
 {
    struct ememoa_memory_base_resize_list_s      *tmp;
+   struct ememoa_memory_base_resize_list_pool_s *over;
+   unsigned int					 i;
+   int						 pos;
 
    if (size == 0)
      return NULL;
 
-   tmp = ememoa_memory_base_alloc (sizeof (struct ememoa_memory_base_resize_list_s));
+   for (over = resize_pool; over && over->count == RESIZE_POOL_SIZE; over = over->next)
+     ;
 
-   if (tmp == NULL)
-     return NULL;
+   if (!over)
+     {
+	over = ememoa_memory_base_alloc (sizeof (struct ememoa_memory_base_resize_list_pool_s));
+	if (!over) return NULL;
+
+	over->next = resize_pool;
+	over->count = 0;
+
+#ifdef USE64
+	for (i = 0; i < 2; ++i)
+#else
+        for(i = 0; i < 4; ++i)
+#endif
+	  over->map[i] = ~0;
+
+	resize_pool = over;
+     }
+
+#ifdef USE64
+   for (i = 0, pos = 0; i < 2 && pos == 0; ++i)
+#else
+   for (i = 0, pos = 0; i < 4 && pos == 0; ++i)
+#endif
+#ifdef USE64
+     pos = ffsll (over->map[i]);
+#else
+     pos = ffs (over->map[i]);
+#endif
+
+   over->count++;
+   pos--;
+   i--;
+
+#ifdef USE64
+   assert(i >= 0 && i < 2);
+   assert(pos >= 0 && pos < 64);
+   tmp = over->array + pos + i * 64;
+#else
+   assert(i >= 0 && i < 4);
+   assert(pos >= 0 && pos < 32);
+   tmp = over->array + pos + i * 32;
+#endif
+
+   over->map[i] &= ~(1 << pos);
 
    bzero (tmp, sizeof (struct ememoa_memory_base_resize_list_s));
    tmp->size = size;
@@ -458,6 +528,9 @@ ememoa_memory_base_resize_list_new (unsigned int size)
 void
 ememoa_memory_base_resize_list_clean (struct ememoa_memory_base_resize_list_s*  base)
 {
+   struct ememoa_memory_base_resize_list_pool_s *over;
+   int index;
+
    if (!base)
      return ;
 
@@ -475,7 +548,20 @@ ememoa_memory_base_resize_list_clean (struct ememoa_memory_base_resize_list_s*  
    base->magic = 0;
 #endif
 
-   ememoa_memory_base_free (base);
+   for (over = resize_pool;
+	over && !(over->array <= base && base < over->array + RESIZE_POOL_SIZE);
+	over = over->next)
+     ;
+
+   assert(over != NULL);
+
+   index = base - over->array;
+
+#ifdef USE64
+   over->map[index / 64] |= (1 << (index % 64));
+#else
+   over->map[index / 32] |= (1 << (index % 32));
+#endif
 }
 
 /**
