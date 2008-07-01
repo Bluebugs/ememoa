@@ -10,7 +10,7 @@ libememoa_la_SOURCES 	=			\
 	mempool_struct.h
 libememoa_la_CFLAGS	= $(PTHREAD_CFLAGS) @COVERAGE_CFLAGS@
 libememoa_la_LIBADD     = @COVERAGE_LIBS@
-libememoa_la_LDFLAGS	= $(PTHREAD_CFLAGS) $(PTHREAD_LIBS) -version-info 0:23:0
+libememoa_la_LDFLAGS	= $(PTHREAD_CFLAGS) $(PTHREAD_LIBS) -version-info 0:24:0
 CC			= $(PTHREAD_CC)
 INCLUDES		= -I$(top_srcdir)/include
 
