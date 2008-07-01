@@ -636,6 +636,134 @@ ememoa_memory_base_resize_list_new_item (struct ememoa_memory_base_resize_list_s
 }
 
 /**
+ * Allocate a set of new items in the list "base".
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @param       count   Number of item to return.
+ * @return	Will return the base item index.
+ * @ingroup	Ememoa_Mempool_Base_Resize_List
+ */
+int
+ememoa_memory_base_resize_list_new_items (struct ememoa_memory_base_resize_list_s *base, int count)
+{
+   uint32_t	map;
+   uint32_t	mask;
+   int		first;
+   int		index;
+   int		i;
+
+   if (base == NULL)
+     return -1;
+
+   EMEMOA_CHECK_MAGIC(base);
+
+   if (base->count < base->actif + count)
+     {
+	unsigned int	total;
+        uint32_t        *tmp_bitmap;
+        void            *tmp_pool;
+
+	total = base->count + (((count >> 5) + 1) << 5);
+
+	tmp_pool = ememoa_memory_base_realloc (base->pool, total * base->size);
+	if (!tmp_pool)
+	  return -1;
+	base->pool = tmp_pool;
+
+	tmp_bitmap = ememoa_memory_base_realloc (base->bitmap, (total >> 5) * sizeof (uint32_t));
+	if (!tmp_bitmap)
+	  return -1;
+	base->bitmap = tmp_bitmap;
+
+	for (i = base->count >> 5; i < total >> 5; ++i)
+	  tmp_bitmap[i] = 0xFFFFFFFF;
+
+#ifdef DEBUG
+        memset ((uint8_t*) tmp_pool + base->count * base->size, 43, base->size * (total - base->count));
+#endif
+
+	base->count = total;
+     }
+
+   /* First lookup for the first chunk with empty slot. */
+   for (i = base->jump; i < (base->count >> 5) && base->bitmap[i] == 0; ++i)
+     ;
+
+   /* Check if we are at the end. */
+   assert (i < (base->count >> 5));
+
+   /* Lookup start on first empty chunk. */
+   map = base->bitmap[i];
+   index = i << 5;
+
+   first = 0;
+   do {
+      int pos;
+
+      /* Look in the current map for available chunk. */
+      pos = ffs(map);
+      if (pos > 0)
+	{
+	   uint32_t inv;
+	   int jump;
+	   int nbits;
+
+	   /* nbits = count bit set in map starting from pos */
+	   if (pos == 32) inv = 0;
+	   else inv = ~map & ~((1 << pos) - 1);
+
+	   jump = ffs(inv);
+	   pos = pos - 1;
+	   nbits = jump - pos;
+	   while (jump == 0 && i < (base->count >> 5))
+	     {
+		map = base->bitmap[++i];
+		inv = ~map;
+		jump = ffs(inv);
+		nbits += 32;
+	     }
+
+	   if (nbits >= count)
+	     {
+		base->actif += count;
+		/* FIXME: Later improve this, but it will ok for the time being. */
+		while (count)
+		  {
+		     int over;
+
+		     count--;
+		     over = index + pos + count;
+		     base->bitmap[over >> 5] &= ~(1 << (over & 0x1F));
+		  }
+
+		if (!first)
+		  base->jump = (index + pos + count) >> 5;
+
+		return index + pos;
+	     }
+
+	   /* Remove all the tested bit from bitmap. */
+	   mask = ~((1 << jump) - 1);
+	   map &= mask;
+	   index = i << 5;
+
+	   /* Only move jump only on first loop iteration. */
+	   first = 1;
+	}
+      else
+	{
+	   while (i < (base->count >> 5) && base->bitmap[i] == 0)
+	     ++i;
+	}
+   } while (i < (base->count >> 5));
+
+   /* We should always find a solution as we always put at least
+      count + 1 items at the end of the pool. */
+   abort();
+   return -1;
+}
+
+/**
  * Give the pointer corresponding to an item index.
  *
  * @param       base    Pointer to a valid and activ list.
@@ -684,6 +812,46 @@ ememoa_memory_base_resize_list_back (struct ememoa_memory_base_resize_list_s *ba
 #ifdef DEBUG
    memset ((uint8_t*) base->pool + base->size * index, 44, base->size);
 #endif
+}
+
+/**
+ * Give back items to the list.
+ *
+ * @param       base    Pointer to a valid and activ list.
+ * @param       index   Item index given by ememoa_memory_base_resize_list_new_items.
+ * @param       count   How much items to give back.
+ * @ingroup	Ememoa_Mempool_Base_Resize_List
+ */
+void
+ememoa_memory_base_resize_list_back_many (struct ememoa_memory_base_resize_list_s *base, int index, int count)
+{
+   unsigned int                 shift;
+   unsigned int                 i;
+
+   EMEMOA_CHECK_MAGIC(base);
+
+   if (index < 0)
+     return ;
+
+   /* FIXME: Later improve this, but it will ok for the time being. */
+   while (count)
+     {
+	shift = index >> 5;
+	i = index & 0x1F;
+
+	base->bitmap[shift] |= (1 << i);
+	base->actif--;
+
+	if (shift < base->jump)
+	  base->jump = shift;
+
+#ifdef DEBUG
+	memset ((uint8_t*) base->pool + base->size * index, 44, base->size);
+#endif
+
+	index++;
+	count--;
+     }
 }
 
 /**

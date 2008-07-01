@@ -85,11 +85,13 @@ struct ememoa_mempool_fixed_pool_s
 {
    unsigned int         jump_object;
    unsigned int         available_objects;
-   bitmask_t            *objects_use;
+   unsigned int		objects;
+   int			objects_use;
    void                 *objects_pool;
 };
 
 struct ememoa_memory_base_resize_list_s *fixed_pool_list = NULL;
+struct ememoa_memory_base_resize_list_s *fixed_bitmap_list = NULL;
 
 /**
  * @defgroup Ememoa_Mempool_Fixed Memory pool manipulation functions for fixed size object
@@ -103,7 +105,7 @@ struct ememoa_memory_base_resize_list_s *fixed_pool_list = NULL;
  * @ingroup	Ememoa_Search_Mempool
  */
 static int
-new_ememoa_fixed_pool ()
+ememoa_fixed_pool_new ()
 {
    if (!fixed_pool_list)
      fixed_pool_list = ememoa_memory_base_resize_list_new (sizeof (struct ememoa_mempool_fixed_s));
@@ -131,7 +133,7 @@ ememoa_mempool_fixed_get_index (unsigned int index)
 }
 
 /**
- * Give back a mempool index. This mempool index will be given back during a later call new_ememoa_fixed_pool().
+ * Give back a mempool index. This mempool index will be given back during a later call ememoa_fixed_pool_new().
  *
  * @param       index   The memory pool index, you want to give back.
  * @ingroup     Ememoa_Search_Mempool
@@ -141,6 +143,56 @@ ememoa_mempool_fixed_back (unsigned int index)
 {
    if (fixed_pool_list)
      ememoa_memory_base_resize_list_back (fixed_pool_list, index);
+}
+
+/**
+ * Allocate a set of new bitmask_t
+ *
+ * @param   count  How many bitmask_t to allocate.
+ * @return         Will return the index of the first bitmask_t or -1 if it failed.
+ * @ingroup        Ememoa_Search_Mempool
+ */
+static int
+ememoa_bitmask_new(int count)
+{
+   if (!fixed_bitmap_list)
+     fixed_bitmap_list = ememoa_memory_base_resize_list_new(sizeof (bitmask_t));
+
+   if (fixed_bitmap_list == NULL)
+     return -1;
+
+   return ememoa_memory_base_resize_list_new_items (fixed_bitmap_list, count);
+}
+
+/**
+ * Search the bitmask_t structur matching the specified index.
+ *
+ * @param       index   The memory pool index you want to retrieve.
+ * @param       offset  The particular offset in it you want to access.
+ * @return              Will return a pointer to the mempool if succeeded and NULL otherwise.
+ * @ingroup     Ememoa_Search_Mempool
+ */
+static bitmask_t*
+ememoa_bitmask_get_index (unsigned int index, unsigned int offset)
+{
+   if (fixed_bitmap_list == NULL)
+     return NULL;
+
+   return ememoa_memory_base_resize_list_get_item (fixed_bitmap_list, index + offset);
+}
+
+/**
+ * Give back a bitmask_t index. This mempool index will be given back during a later call ememoa_bitmask_new().
+ *
+ * @param       index   The memory pool index, you want to give back.
+ * @param       count   How much bitmask_t you are giving back.
+ * @ingroup     Ememoa_Search_Mempool
+ */
+static void
+ememoa_bitmask_back (unsigned int index, unsigned int count)
+{
+   if (fixed_bitmap_list)
+     ememoa_memory_base_resize_list_back_many (fixed_bitmap_list, index, count);
 }
 
 /**
@@ -183,7 +235,7 @@ ememoa_mempool_fixed_init (unsigned int				object_size,
                            unsigned int				options,
                            const struct ememoa_mempool_desc_s	*desc)
 {
-   int					index = new_ememoa_fixed_pool ();
+   int					index = ememoa_fixed_pool_new ();
    struct ememoa_mempool_fixed_s	*memory = ememoa_mempool_fixed_get_index(index);
 
    if (index == -1)
@@ -308,6 +360,7 @@ static struct ememoa_mempool_fixed_pool_s*
 add_pool (struct ememoa_mempool_fixed_s *memory)
 {
    struct ememoa_mempool_fixed_pool_s   *pool;
+   bitmask_t				*bmsk;
    int                                  index;
 
    index = ememoa_memory_base_resize_list_new_item (memory->base);
@@ -316,15 +369,16 @@ add_pool (struct ememoa_mempool_fixed_s *memory)
    if (pool == NULL)
      return NULL;
 
-   pool->objects_use = ememoa_memory_base_alloc (sizeof (bitmask_t) * memory->max_objects_poi);
+   pool->objects = memory->max_objects_poi;
+   pool->objects_use = ememoa_bitmask_new(pool->objects);
    pool->objects_pool = ememoa_memory_base_alloc (EMEMOA_SIZEOF_POOL(memory));
    pool->available_objects = memory->max_objects - 1;
    pool->jump_object = 0;
 
-   if (pool->objects_use == NULL
+   if (pool->objects_use == -1
        || pool->objects_pool == NULL)
      {
-	ememoa_memory_base_free (pool->objects_use);
+	ememoa_bitmask_back (pool->objects_use, pool->objects);
 	ememoa_memory_base_free (pool->objects_pool);
         ememoa_memory_base_resize_list_back (memory->base, index);
 	memory->last_error_code = EMEMOA_ERROR_MALLOC_NEW_POOL;
@@ -337,7 +391,9 @@ add_pool (struct ememoa_mempool_fixed_s *memory)
 #endif
 
    /* Set all objects as available */
-   memset (pool->objects_use, 0xFF, sizeof (bitmask_t) * memory->max_objects_poi);
+   bmsk = ememoa_bitmask_get_index (pool->objects_use, 0);
+   assert(bmsk != NULL);
+   memset (bmsk, 0xFF, sizeof (bitmask_t) * memory->max_objects_poi);
 
    return pool;
 }
@@ -403,7 +459,7 @@ ememoa_mempool_fixed_pop_object (int mempool)
 
    if (pool != NULL)
      {
-	bitmask_t	*itr = pool->objects_use;
+	bitmask_t	*itr = ememoa_bitmask_get_index(pool->objects_use, 0);
 	bitmask_t	reg;
 	int		index = 0;
 
@@ -432,9 +488,9 @@ ememoa_mempool_fixed_pop_object (int mempool)
 	start_address = pool->objects_pool + index * memory->object_size;
 
 	set_address (EMEMOA_INDEX_LOW(index),
-                    EMEMOA_INDEX_HIGH(index),
-                    pool->objects_use,
-                    &pool->jump_object);
+		     EMEMOA_INDEX_HIGH(index),
+		     ememoa_bitmask_get_index(pool->objects_use, 0),
+		     &pool->jump_object);
      }
    else
      {
@@ -443,8 +499,8 @@ ememoa_mempool_fixed_pop_object (int mempool)
 	  {
 	     start_address = pool->objects_pool;
 	     set_address (0, 0,
-                         pool->objects_use,
-                         &pool->jump_object);
+			  ememoa_bitmask_get_index(pool->objects_use, 0),
+			  &pool->jump_object);
 	  }
 	else
 	  memory->last_error_code = EMEMOA_NO_MORE_MEMORY;
@@ -474,7 +530,7 @@ ememoa_mempool_fixed_free_pool_cb (void *ctx, int index, void *data)
 
    (void) ctx; (void) index;
 
-   ememoa_memory_base_free (pool->objects_use);
+   ememoa_bitmask_back (pool->objects_use, pool->objects);
    ememoa_memory_base_free (pool->objects_pool);
 
    return 1;
@@ -537,7 +593,7 @@ ememoa_mempool_fixed_push_object_cb (void *ctx, int index, void *data)
 
    if (pool->objects_pool <= pctx->ptr && pctx->ptr_inf <= ((uint8_t*) pool->objects_pool))
      {
-        bitmask_t		*objects_use = pool->objects_use;
+        bitmask_t		*objects_use = ememoa_bitmask_get_index(pool->objects_use, 0);
         bitmask_t		mask = 1;
         /*
           High risk, if one day sizeof (unsigned long) > sizeof (void*)
@@ -649,7 +705,7 @@ ememoa_used_pool_cb (void *ctx, int index, void *data)
    if (pool->available_objects != memory->max_objects)
      return 1;
 
-   ememoa_memory_base_free (pool->objects_use);
+   ememoa_bitmask_back (pool->objects_use, pool->objects);
    ememoa_memory_base_free (pool->objects_pool);
 
    pool->objects_use = NULL;
@@ -798,7 +854,7 @@ ememoa_mempool_fixed_walk_over_cb (void *ctx, int index, void *data)
    struct ememoa_mempool_fixed_pool_s           *pool = data;
    struct ememoa_mempool_fixed_walk_ctx_s       *wctx = ctx;
    uint8_t                                      *start_address = pool->objects_pool;
-   bitmask_t                                    *objects_use = pool->objects_use;
+   bitmask_t                                    *objects_use = ememoa_bitmask_get_index(pool->objects_use, 0);
    unsigned int                                 j, k;
 
    (void) index;
@@ -894,7 +950,7 @@ ememoa_mempool_fixed_display_pool_cb (void *ctx, int index, void *data)
 	display[(1 << BITMASK_POWER)] = '\0';
 	for (i = 0; i < memory->max_objects_poi; ++i)
 	  {
-	     bitmask_t	*objects_use = pool->objects_use;
+	     bitmask_t	*objects_use = ememoa_bitmask_get_index(pool->objects_use, 0);
 
 	     value = objects_use[i];
 	     for (j = 0; j < (1 << BITMASK_POWER); ++j, value >>= 1)
