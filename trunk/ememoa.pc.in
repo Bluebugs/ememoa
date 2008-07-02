@@ -1,0 +1,12 @@
+Name: ememoa
+Description: Fast memory pool allocator.
+Version: @VERSION@
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Libs: -L${libdir} -lememoa
+Libs.private: @PTHREAD_LIBS@ @COVERAGE_LIBS@
+Cflags: -I${includedir}

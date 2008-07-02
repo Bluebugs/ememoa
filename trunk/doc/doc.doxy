@@ -4,7 +4,7 @@
 # Project related configuration options
 #---------------------------------------------------------------------------
 PROJECT_NAME           = "Ememoa"
-PROJECT_NUMBER         = "v0.0.24 %%Revision%%"
+PROJECT_NUMBER         = "v0.0.25 %%Revision%%"
 OUTPUT_DIRECTORY       = 
 CREATE_SUBDIRS         = NO
 OUTPUT_LANGUAGE        = English

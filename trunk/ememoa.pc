@@ -1,0 +1,12 @@
+Name: ememoa
+Description: Fast memory pool allocator.
+Version: 0.0.25
+
+prefix=/usr/local
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Libs: -L${libdir} -lememoa
+Libs.private:  
+Cflags: -I${includedir}
