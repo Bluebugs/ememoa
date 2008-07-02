@@ -5,7 +5,7 @@
 
 # Autconf init
 AC_PREREQ(2.59)
-AC_INIT([ememoa], [0.0.24], [cedric.bail@free.fr])
+AC_INIT([ememoa], [0.0.25], [cedric.bail@free.fr])
 
 # Auxiliary files
 AC_CONFIG_AUX_DIR([build-aux])
@@ -21,9 +21,8 @@ AC_CANONICAL_HOST
 AM_INIT_AUTOMAKE([1.9.2 foreign dist-bzip2])
 AM_CONFIG_HEADER([config.h])
 
-# Make sure $prefix is defined.
-test "x$prefix" = xNONE && prefix=$ac_default_prefix
-test "x$exec_prefix" = xNONE && exec_prefix=$prefix
+# Libtool
+AM_PROG_LIBTOOL
 
 AC_ARG_ENABLE([debug],
         [AS_HELP_STRING([--enable-debug], [for debugging with gdb])],
@@ -80,17 +79,16 @@ AC_ARG_VAR([DOXYGEN], [A C++ documentation system program])
 # Require C99 style.
 #CFLAGS="$CFLAGS -std=c99"
 
-# Libtool
-AC_DISABLE_STATIC
-AM_PROG_LIBTOOL
-
 # Check for pthread.
 AC_ARG_ENABLE([pthread],
         [AS_HELP_STRING([--disable-pthread], [to disable pthread])],
-        [use_pthread=no],
-	[use_pthread=yes])
+        [use_pthread=yes],
+	[use_pthread=no])
 if test x$use_pthread = xyes; then
    ACX_PTHREAD
+else
+   PTHREAD_CC="$CC"
+   AC_SUBST(PTHREAD_CC)
 fi
 
 # More thing in one register :-)
@@ -124,12 +122,14 @@ if test "x$want_basic_alloc_report" = "xyes"; then
 fi
 
 # Configure files.
-AC_CONFIG_FILES([
+AC_OUTPUT([
   include/Makefile
   src/lib/ememoa/Makefile
   doc/Makefile
   doc/doc.doxy
   test/Makefile
+  ememoa.pc
 ])
-AC_OUTPUT
 
+echo "pthreads: $use_pthread"
+echo "use 64bits: $want_use64"
