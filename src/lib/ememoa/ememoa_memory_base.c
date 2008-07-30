@@ -467,6 +467,11 @@ ememoa_memory_base_resize_list_new (unsigned int size)
 {
    struct ememoa_memory_base_resize_list_s      *tmp;
    struct ememoa_memory_base_resize_list_pool_s *over;
+#ifdef USE64
+   uint64_t					 mask = 1;
+#else
+   uint32_t					 mask = 1;
+#endif
    unsigned int					 i;
    int						 pos;
 
@@ -519,7 +524,8 @@ ememoa_memory_base_resize_list_new (unsigned int size)
    tmp = over->array + pos + i * 32;
 #endif
 
-   over->map[i] &= ~(1 << pos);
+   mask <<= pos;
+   over->map[i] &= ~mask;
 
    bzero (tmp, sizeof (struct ememoa_memory_base_resize_list_s));
    tmp->size = size;
