@@ -708,7 +708,7 @@ ememoa_used_pool_cb (void *ctx, int index, void *data)
    ememoa_bitmask_back (pool->objects_use, pool->objects);
    ememoa_memory_base_free (pool->objects_pool);
 
-   pool->objects_use = NULL;
+   pool->objects_use = 0;
    pool->objects_pool = NULL;
    pool->available_objects = 0;
 
