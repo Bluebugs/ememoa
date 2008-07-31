@@ -2,7 +2,7 @@ Name: ememoa
 Description: Fast memory pool allocator.
 Version: 0.0.26
 
-prefix=/usr/devel
+prefix=/usr/local
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
