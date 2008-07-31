@@ -2,6 +2,9 @@
 
 SUBDIRS = build-aux include src/lib/ememoa test doc
 
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = ememoa.pc
+
 ACLOCAL_AMFLAGS = -I build-aux
 
 EXTRA_DIST	= bootstrap
