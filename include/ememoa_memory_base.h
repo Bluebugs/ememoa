@@ -25,9 +25,9 @@ struct ememoa_memory_base_resize_list_s
 };
 
 /* Direct use of this two function is most of the time a bad idea. */
-extern void*    (*ememoa_memory_base_alloc)(unsigned int size);
+extern void*    (*ememoa_memory_base_alloc)(size_t size);
 extern void     (*ememoa_memory_base_free)(void *ptr);
-extern void*    (*ememoa_memory_base_realloc)(void* ptr, unsigned int size);
+extern void*    (*ememoa_memory_base_realloc)(void* ptr, size_t size);
 
 int     ememoa_memory_base_init_64m(void* buffer, unsigned int size);
 
@@ -47,6 +47,11 @@ void*   ememoa_memory_base_resize_list_search_over (struct ememoa_memory_base_re
                                                     int (*fct)(void *ctx, int index, void *data),
                                                     void *ctx,
                                                     int *index);
+int     ememoa_memory_base_resize_list_new_items (struct ememoa_memory_base_resize_list_s *base,
+						  int count);
+void    ememoa_memory_base_resize_list_back_many (struct ememoa_memory_base_resize_list_s *base,
+						  int index,
+						  int count);
 
 /* Be carefull when you call this function, you will loose all index mapping after this call. */
 int     ememoa_memory_base_resize_list_garbage_collect (struct ememoa_memory_base_resize_list_s *base);

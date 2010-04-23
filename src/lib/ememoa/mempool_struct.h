@@ -88,9 +88,9 @@ struct ememoa_mempool_unknown_size_s
 
    unsigned int                                 pools_count;
    unsigned int                                 *pools_match;
-   unsigned int                                 *pools;
+   int                                          *pools;
 
-   unsigned int                                 allocated_list;
+   int						allocated_list;
 
    struct ememoa_mempool_alloc_item_s           *start;
 
