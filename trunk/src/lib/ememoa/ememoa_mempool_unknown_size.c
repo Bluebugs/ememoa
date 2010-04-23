@@ -398,6 +398,8 @@ ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
 
    EMEMOA_CHECK_MAGIC(old);
 
+   EMEMOA_LOCK(memory);
+
    if (old->index == -1)
      {
         struct ememoa_mempool_alloc_item_s              *item;
@@ -412,7 +414,9 @@ ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
              item->size = size;
              tmp->data = tmp + 1;
 
-             return tmp->data;
+	     EMEMOA_UNLOCK(memory);
+
+	     return tmp->data;
           }
 
         copy = item->size;
@@ -420,10 +424,15 @@ ememoa_mempool_unknown_size_resize_object (unsigned int mempool,
    else
      {
         if (memory->pools_match[old->index] >= size)
-          return ptr;
+	  {
+	     EMEMOA_UNLOCK(memory);
+	     return ptr;
+	  }
 
         copy = memory->pools_match[old->index];
      }
+
+   EMEMOA_UNLOCK(memory);
 
    new = ememoa_mempool_unknown_size_pop_object (mempool, size);
    if (!new)

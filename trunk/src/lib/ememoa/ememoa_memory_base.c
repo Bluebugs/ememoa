@@ -28,9 +28,22 @@
 
 static int total = 0;
 
-void* (*ememoa_memory_base_alloc)(unsigned int size) = malloc;
+#ifdef HAVE_PTHREAD
+static pthread_mutex_t lockit = PTHREAD_MUTEX_INITIALIZER;
+
+#define LK(Lock) pthread_mutex_lock(&Lock);
+#define ULK(Lock) pthread_mutex_unlock(&Lock);
+
+#else
+
+#define LK(Lock)
+#define ULK(Lock)
+
+#endif
+
+void* (*ememoa_memory_base_alloc)(size_t size) = malloc;
 void  (*ememoa_memory_base_free)(void* ptr) = free;
-void* (*ememoa_memory_base_realloc)(void* ptr, unsigned int size) = realloc;
+void* (*ememoa_memory_base_realloc)(void* ptr, size_t size) = realloc;
 
 /**
  * @defgroup Ememoa_Mempool_Base_64m Static buffer allocator.
@@ -226,11 +239,13 @@ ememoa_memory_base_split_64m (uint16_t index, unsigned int length)
  * @ingroup	Ememoa_Mempool_Base_64m
  */
 static void*
-ememoa_memory_base_alloc_64m (unsigned int size)
+ememoa_memory_base_alloc_64m (size_t size)
 {
    uint16_t     real = (size >> 12) + (size & 0xFFF ? 1 : 0);
    uint16_t     jump = base_64m->start;
    uint16_t     prev = 0xFFFF;
+
+   LK(lockit);
 
    while (jump != 0xFFFF && base_64m->chunks[jump].length > real)
      {
@@ -252,8 +267,12 @@ ememoa_memory_base_alloc_64m (unsigned int size)
 #ifdef ALLOC_REPORT
 	fprintf(stderr, "alloc %i(%i) [%i] => %p\n", real << 12, size, total << 12, ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12));
 #endif
+	ULK(lockit);
+
         return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
      }
+
+   ULK(lockit);
 
    return NULL;
 }
@@ -277,6 +296,8 @@ ememoa_memory_base_free_64m (void* ptr)
      return ;
 
    assert (ptr > base_64m->base);
+
+   LK(lockit);
 
    index = delta >> 12;
    chunk_index = base_64m->pages[index];
@@ -306,6 +327,8 @@ ememoa_memory_base_free_64m (void* ptr)
 
    ememoa_memory_base_insert_in_list (chunk_index);
    base_64m->chunks[chunk_index].use = 0;
+
+   ULK(lockit);
 }
 
 /**
@@ -317,7 +340,7 @@ ememoa_memory_base_free_64m (void* ptr)
  * @ingroup	Ememoa_Mempool_Base_64m
  */
 static void*
-ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
+ememoa_memory_base_realloc_64m (void* ptr, size_t size)
 {
    void*        tmp;
    unsigned int delta = ptr - base_64m->base;
@@ -337,6 +360,8 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
    /* FIXME: Not resizing when the size is big enough */
    if (real <= base_64m->chunks[chunk_index].length)
      return ptr;
+
+   LK(lockit);
 
    next_chunk_index = base_64m->pages[base_64m->chunks[chunk_index].end + 1];
 
@@ -363,8 +388,12 @@ ememoa_memory_base_realloc_64m (void* ptr, unsigned int size)
 	  fprintf(stderr, "realloc %i(%i) [%i] => %p\n", (real - tmp) << 12, size, total << 12, ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12));
 #endif
 
+	  ULK(lockit);
+
           return ((uint8_t*) base_64m->base) + (base_64m->chunks[allocated].start << 12);
        }
+
+   ULK(lockit);
 
    tmp = ememoa_memory_base_alloc_64m(size);
    if (!tmp)
@@ -519,7 +548,7 @@ ememoa_memory_base_resize_list_new (unsigned int size)
    assert(pos >= 0 && pos < 64);
    tmp = over->array + pos + i * 64;
 #else
-   assert(i >= 0 && i < 4);
+   assert(i < 4);
    assert(pos >= 0 && pos < 32);
    tmp = over->array + pos + i * 32;
 #endif
@@ -656,7 +685,7 @@ ememoa_memory_base_resize_list_new_items (struct ememoa_memory_base_resize_list_
    uint32_t	mask;
    int		first;
    int		index;
-   int		i;
+   unsigned int	i;
 
    if (base == NULL)
      return -1;
